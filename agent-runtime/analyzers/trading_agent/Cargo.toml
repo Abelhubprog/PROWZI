@@ -1,0 +1,71 @@
+[package]
+name = "prowzi-trading-agent"
+version = "0.1.0"
+edition = "2021"
+description = "Autonomous trading agent for Prowzi's real-time crypto intelligence platform"
+authors = ["Prowzi Team"]
+license = "MIT"
+
+[[bin]]
+name = "trading-agent"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.14", features = ["full", "time"] }
+
+# Messaging
+async-nats = "0.30"
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Solana SDK
+solana-sdk = "1.14"
+solana-client = "1.14"
+solana-transaction-status = "1.14"
+
+# Error handling and utilities
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.3", features = ["v4", "serde"] }
+
+# LLM client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Crypto utilities
+bs58 = "0.4"
+
+# Crypto signing
+prowzi-crypto-signer = { path = "../../crypto_signer" }
+
+# Core Prowzi dependencies
+prowzi-core = { path = "../../core" }
+
+# Hardware acceleration libraries
+rayon = "1.7"
+crossbeam = "0.8"
+
+# Additional utilities for advanced features
+dashmap = "5.4"
+parking_lot = "0.12"
+ring = "0.16"
+
+# Web server for dashboard
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.4", features = ["cors"] }
+
+[features]
+default = ["dry-run"]
+dry-run = []
+live = []
+
+[dev-dependencies]
+mockall = "0.11"
+tokio-test = "0.4"

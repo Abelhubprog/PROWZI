@@ -1,0 +1,75 @@
+{
+  "dashboard": {
+    "title": "Prowzi System Overview",
+    "panels": [
+      {
+        "title": "End-to-End Latency",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(prowzi_brief_generation_seconds_bucket[5m])) by (le, domain))",
+            "legendFormat": "P99 {{ domain }}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(prowzi_brief_generation_seconds_bucket[5m])) by (le, domain))",
+            "legendFormat": "P95 {{ domain }}"
+          },
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(prowzi_brief_generation_seconds_bucket[5m])) by (le, domain))",
+            "legendFormat": "P50 {{ domain }}"
+          }
+        ]
+      },
+      {
+        "title": "Budget Utilization",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "sum(prowzi_budget_consumed_total) by (mission_id, resource_type) / sum(prowzi_budget_limit) by (mission_id, resource_type)",
+            "legendFormat": "{{ mission_id }} - {{ resource_type }}"
+          }
+        ]
+      },
+      {
+        "title": "Active Agents",
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(prowzi_active_agents) by (agent_type)",
+            "legendFormat": "{{ agent_type }}"
+          }
+        ]
+      },
+      {
+        "title": "GPU Utilization",
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+        "targets": [
+          {
+            "expr": "avg(prowzi_gpu_utilization_percent) by (node)",
+            "legendFormat": "{{ node }}"
+          }
+        ]
+      },
+      {
+        "title": "Error Rate",
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(prowzi_errors_total[5m])) by (service, error_type)",
+            "legendFormat": "{{ service }} - {{ error_type }}"
+          }
+        ]
+      },
+      {
+        "title": "Events Processing Rate",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+        "targets": [
+          {
+            "expr": "sum(rate(prowzi_events_processed_total[5m])) by (domain, source)",
+            "legendFormat": "{{ domain }} - {{ source }}"
+          }
+        ]
+      }
+    ]
+  }
+}

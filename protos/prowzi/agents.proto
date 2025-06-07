@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package prowzi.agents;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/prowzi/prowzi/pkg/protos/agents";
+
+// Agent lifecycle and communication messages
+message AgentSpec {
+  string agent_id = 1;
+  string agent_type = 2;
+  string mission_id = 3;
+  AgentConfig config = 4;
+  ResourceLimits limits = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message AgentConfig {
+  string llm_model = 1;
+  map<string, string> parameters = 2;
+  repeated string data_sources = 3;
+  google.protobuf.Duration timeout = 4;
+  int32 max_retries = 5;
+}
+
+message ResourceLimits {
+  int64 max_tokens = 1;
+  int64 max_requests_per_minute = 2;
+  int64 max_memory_mb = 3;
+  int64 max_cpu_cores = 4;
+}
+
+// Agent status and health
+message AgentStatus {
+  string agent_id = 1;
+  AgentState state = 2;
+  string current_task = 3;
+  ResourceUsage resource_usage = 4;
+  google.protobuf.Timestamp last_heartbeat = 5;
+  repeated string errors = 6;
+  int32 tasks_completed = 7;
+  float success_rate = 8;
+}
+
+enum AgentState {
+  AGENT_STATE_UNSPECIFIED = 0;
+  AGENT_STATE_INITIALIZING = 1;
+  AGENT_STATE_IDLE = 2;
+  AGENT_STATE_WORKING = 3;
+  AGENT_STATE_WAITING = 4;
+  AGENT_STATE_ERROR = 5;
+  AGENT_STATE_TERMINATING = 6;
+  AGENT_STATE_TERMINATED = 7;
+}
+
+message ResourceUsage {
+  int64 tokens_used = 1;
+  int64 requests_made = 2;
+  int64 memory_used_mb = 3;
+  float cpu_usage_percent = 4;
+  google.protobuf.Duration uptime = 5;
+}
+
+// Mission planning and execution
+message Mission {
+  string mission_id = 1;
+  string user_id = 2;
+  string prompt = 3;
+  MissionConfig config = 4;
+  MissionStatus status = 5;
+  repeated AgentSpec agents = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp deadline = 8;
+}
+
+message MissionConfig {
+  google.protobuf.Duration duration = 1;
+  Budget budget = 2;
+  repeated string domains = 3;
+  Priority priority = 4;
+  map<string, string> parameters = 5;
+}
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_MEDIUM = 2;
+  PRIORITY_HIGH = 3;
+  PRIORITY_CRITICAL = 4;
+}
+
+message Budget {
+  int64 max_tokens = 1;
+  int64 max_requests = 2;
+  float max_cost_usd = 3;
+  google.protobuf.Duration max_duration = 4;
+}
+
+enum MissionStatus {
+  MISSION_STATUS_UNSPECIFIED = 0;
+  MISSION_STATUS_PLANNING = 1;
+  MISSION_STATUS_ACTIVE = 2;
+  MISSION_STATUS_PAUSED = 3;
+  MISSION_STATUS_COMPLETED = 4;
+  MISSION_STATUS_FAILED = 5;
+  MISSION_STATUS_CANCELLED = 6;
+}
+
+// Inter-agent communication
+message AgentMessage {
+  string from_agent_id = 1;
+  string to_agent_id = 2;
+  MessageType type = 3;
+  string content = 4;
+  map<string, string> metadata = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  MESSAGE_TYPE_TASK_REQUEST = 1;
+  MESSAGE_TYPE_TASK_RESPONSE = 2;
+  MESSAGE_TYPE_DATA_SHARE = 3;
+  MESSAGE_TYPE_COORDINATION = 4;
+  MESSAGE_TYPE_HEARTBEAT = 5;
+  MESSAGE_TYPE_ERROR = 6;
+}
+
+// Orchestrator commands
+message SpawnAgentCommand {
+  string mission_id = 1;
+  string agent_type = 2;
+  AgentConfig config = 3;
+  ResourceLimits limits = 4;
+}
+
+message TerminateAgentCommand {
+  string agent_id = 1;
+  string reason = 2;
+  bool force = 3;
+}
+
+message UpdateBudgetCommand {
+  string mission_id = 1;
+  Budget new_budget = 2;
+  string reason = 3;
+}

@@ -1,0 +1,79 @@
+# charts/prowzi/values.yaml
+global:
+  environment: production
+  domain: prowzi.io
+
+gateway:
+  replicaCount: 3
+  image:
+    repository: prowzi/gateway
+    tag: latest
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+orchestrator:
+  replicaCount: 2
+  image:
+    repository: prowzi/orchestrator
+    tag: latest
+  config:
+    maxConcurrentMissions: 100
+    defaultTokenBudget: 10000
+
+agents:
+  sensor:
+    solana:
+      enabled: true
+      replicas: 2
+      rpcEndpoint: "${SOLANA_RPC_ENDPOINT}"
+    github:
+      enabled: true
+      replicas: 1
+      rateLimit: 5000
+
+  pools:
+    cpu:
+      nodeSelector:
+        workload: cpu-optimized
+      tolerations:
+        - key: "prowzi.io/cpu-only"
+          operator: "Equal"
+          value: "true"
+    gpu:
+      nodeSelector:
+        workload: gpu-optimized
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+
+namespace:
+  annotations:
+    "iam.amazonaws.com/role": "prowzi-${ENVIRONMENT}"
+```
+
+### Namespace Template
+```yaml
+# charts/prowzi/templates/namespace.yaml
+{{- range $tenant := .Values.tenants }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prowzi-tenant-{{ $tenant.id }}
+  labels:
+    app.kubernetes.io/name: {{ include "prowzi.name" . }}
+    prowzi.io/tenant: {{ $tenant.id }}
+    prowzi.io/tier: {{ $tenant.tier }}
+  annotations:
+    prowzi.io/data-residency: {{ $tenant.dataResidency }}
+{{- end }}

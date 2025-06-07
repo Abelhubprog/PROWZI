@@ -1,0 +1,18 @@
+# Prowzi ADK Agents Dependencies
+google-adk>=1.0.0
+nats-py>=2.6.0
+asyncio-nats-client>=0.11.4
+pydantic>=2.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Optional ML dependencies
+scikit-learn>=1.3.0
+torch>=2.0.0
+transformers>=4.30.0
+
+# Development dependencies
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+mypy>=1.5.0

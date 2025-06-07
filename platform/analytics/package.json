@@ -1,0 +1,52 @@
+{
+  "name": "@prowzi/analytics",
+  "version": "0.1.0",
+  "description": "Prowzi analytics and metrics service",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "pg": "^8.11.3",
+    "redis": "^4.6.10",
+    "influxdb-client": "^1.33.2",
+    "zod": "^3.22.4",
+    "winston": "^3.11.0",
+    "prom-client": "^15.1.0",
+    "uuid": "^9.0.1",
+    "d3": "^7.8.5",
+    "node-cron": "^3.0.3",
+    "date-fns": "^2.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/compression": "^1.7.5",
+    "@types/pg": "^8.10.9",
+    "@types/uuid": "^9.0.7",
+    "@types/d3": "^7.4.3",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^5.3.2",
+    "tsx": "^4.6.0",
+    "eslint": "^8.54.0",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0",
+    "prettier": "^3.1.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

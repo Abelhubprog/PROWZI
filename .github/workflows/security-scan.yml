@@ -1,0 +1,157 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run security scans daily at 3 AM UTC
+    - cron: '0 3 * * *'
+
+jobs:
+  # Static security analysis for dependencies
+  dependency-check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scan-type: [rust, node, python]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Rust (for Rust dependencies)
+      if: matrix.scan-type == 'rust'
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        
+    - name: Setup Node.js (for Node dependencies) 
+      if: matrix.scan-type == 'node'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Setup Python (for Python dependencies)
+      if: matrix.scan-type == 'python'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Rust Security Audit
+      if: matrix.scan-type == 'rust'
+      run: |
+        cargo install cargo-audit
+        find . -name "Cargo.toml" -not -path "./target/*" | xargs -I {} cargo audit --file {}
+    
+    - name: Node.js Security Audit
+      if: matrix.scan-type == 'node'
+      run: |
+        find . -name "package.json" -not -path "./node_modules/*" | while read package; do
+          dir=$(dirname "$package")
+          cd "$dir" && npm audit --audit-level=moderate && cd -
+        done
+    
+    - name: Python Security Scan with Safety
+      if: matrix.scan-type == 'python'
+      run: |
+        pip install safety
+        find . -name "requirements.txt" | xargs -I {} safety check -r {}
+
+  # SAST with CodeQL
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      
+    strategy:
+      matrix:
+        language: ['javascript', 'python', 'rust']
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+        
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+      
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+
+  # Container image security scanning
+  container-scan:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build Docker images
+      run: |
+        docker build -f docker/gateway/Dockerfile -t prowzi/gateway:test .
+        docker build -f docker/orchestrator/Dockerfile -t prowzi/orchestrator:test .
+        docker build -f docker/evaluator/Dockerfile -t prowzi/evaluator:test .
+    
+    - name: Scan gateway image
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'prowzi/gateway:test'
+        format: 'sarif'
+        output: 'gateway-results.sarif'
+    
+    - name: Scan orchestrator image
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'prowzi/orchestrator:test'
+        format: 'sarif'
+        output: 'orchestrator-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: '.'
+
+  # Secrets scanning
+  secrets-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Install TruffleHog
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+    
+    - name: Scan for secrets
+      run: |
+        trufflehog git file://. --since-commit HEAD~1 --only-verified --fail
+
+  # Infrastructure security scanning
+  iac-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Checkov
+      uses: bridgecrewio/checkov-action@master
+      with:
+        directory: .
+        framework: dockerfile,kubernetes,terraform
+        output_format: sarif
+        output_file_path: checkov-results.sarif
+    
+    - name: Upload Checkov results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: checkov-results.sarif

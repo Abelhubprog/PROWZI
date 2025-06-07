@@ -1,0 +1,25 @@
+{
+  "name": "@prowzi/webhook-verify",
+  "version": "1.0.0",
+  "description": "Webhook signature verification utilities for Prowzi",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "prepublish": "npm run build"
+  },
+  "keywords": ["webhook", "security", "verification", "crypto"],
+  "author": "Prowzi Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ]
+}

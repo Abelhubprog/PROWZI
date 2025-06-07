@@ -1,0 +1,51 @@
+[package]
+name = "prowzi-sensor-solana-mempool"
+version = "0.1.0"
+edition = "2021"
+authors = ["Prowzi Team <team@prowzi.com>"]
+description = "Solana mempool monitoring sensor for Prowzi AI agents"
+license = "MIT"
+repository = "https://github.com/prowzi/prowzi"
+
+[dependencies]
+tokio = { version = "1.36", features = ["full"] }
+solana-client = "1.17"
+solana-sdk = "1.17"
+solana-account-decoder = "1.17"
+solana-transaction-status = "1.17"
+solana-rpc-client-api = "1.17"
+solana-rpc-client = "1.17"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.7", features = ["v4", "serde"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures = "0.3"
+futures-util = "0.3"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.21"
+bs58 = "0.5"
+dashmap = "5.5"
+parking_lot = "0.12"
+once_cell = "1.19"
+lazy_static = "1.4"
+regex = "1.10"
+url = "2.5"
+
+# Agent runtime core dependencies
+prowzi-core = { path = "../../core" }
+prowzi-types = { path = "../../../platform/shared/types" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.9"
+mockito = "1.4"
+
+[features]
+default = ["mainnet"]
+mainnet = []
+testnet = []
+devnet = []

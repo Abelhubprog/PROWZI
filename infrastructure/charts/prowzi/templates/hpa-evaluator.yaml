@@ -1,0 +1,47 @@
+{{- if .Values.evaluator.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "prowzi.fullname" . }}-evaluator
+  labels:
+    {{- include "prowzi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: evaluator
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+    {{- with .Values.evaluator.hpa.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "prowzi.fullname" . }}-evaluator
+  minReplicas: {{ .Values.evaluator.hpa.minReplicas | default 2 }}
+  maxReplicas: {{ .Values.evaluator.hpa.maxReplicas | default 10 }}
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: nats_consumer_pending_messages
+          selector:
+            matchLabels:
+              stream: EVALUATOR
+              consumer: evaluator-consumer
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.evaluator.hpa.target | default 100 }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 60
+{{- end }}

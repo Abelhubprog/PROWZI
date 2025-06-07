@@ -1,0 +1,47 @@
+{
+  "dashboard": {
+    "title": "Prowzi FinOps",
+    "panels": [
+      {
+        "title": "Cost per Brief",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "(sum(prowzi_tokens_used_total * 0.00002) + sum(prowzi_gpu_seconds_total * 0.0001)) / sum(prowzi_briefs_generated_total)",
+            "legendFormat": "Avg Cost per Brief"
+          }
+        ]
+      },
+      {
+        "title": "GPU Cost by Mission",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "sum(prowzi_gpu_seconds_total * 0.0001) by (mission_id)",
+            "legendFormat": "{{ mission_id }}"
+          }
+        ]
+      },
+      {
+        "title": "Token Usage Breakdown",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(prowzi_tokens_used_total) by (service, model)",
+            "legendFormat": "{{ service }} - {{ model }}"
+          }
+        ]
+      },
+      {
+        "title": "Cost per User",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(prowzi_user_cost_dollars) by (user_id)",
+            "legendFormat": "{{ user_id }}"
+          }
+        ]
+      }
+    ]
+  }
+}

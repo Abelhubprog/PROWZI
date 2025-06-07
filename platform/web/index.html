@@ -1,0 +1,313 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prowzi - AI Agent Intelligence Platform</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Prowzi</span>
+                </div>
+                <nav class="nav">
+                    <button class="nav-btn active" data-tab="dashboard">
+                        <i class="fas fa-chart-line"></i>
+                        Dashboard
+                    </button>
+                    <button class="nav-btn" data-tab="agents">
+                        <i class="fas fa-robot"></i>
+                        Agents
+                    </button>
+                    <button class="nav-btn" data-tab="missions">
+                        <i class="fas fa-rocket"></i>
+                        Missions
+                    </button>
+                    <button class="nav-btn" data-tab="events">
+                        <i class="fas fa-stream"></i>
+                        Events
+                    </button>
+                    <button class="nav-btn" data-tab="briefs">
+                        <i class="fas fa-file-alt"></i>
+                        Briefs
+                    </button>
+                </nav>
+                <div class="header-actions">
+                    <button class="system-status" id="system-status">
+                        <i class="fas fa-circle status-indicator"></i>
+                        <span class="status-text">Checking...</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Dashboard Tab -->
+            <div class="tab-content active" id="dashboard">
+                <div class="dashboard-grid">
+                    <!-- System Overview -->
+                    <div class="card stats-card">
+                        <h3><i class="fas fa-tachometer-alt"></i> System Overview</h3>
+                        <div class="stats-grid">
+                            <div class="stat">
+                                <div class="stat-value" id="total-agents">0</div>
+                                <div class="stat-label">Active Agents</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value" id="active-missions">0</div>
+                                <div class="stat-label">Missions</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value" id="events-processed">0</div>
+                                <div class="stat-label">Events Today</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value" id="briefs-generated">0</div>
+                                <div class="stat-label">Briefs</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Event Stream -->
+                    <div class="card stream-card">
+                        <h3><i class="fas fa-stream"></i> Live Event Stream</h3>
+                        <div class="stream-container" id="event-stream">
+                            <div class="stream-placeholder">
+                                <i class="fas fa-signal"></i>
+                                <p>Waiting for events...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Briefs -->
+                    <div class="card briefs-card">
+                        <h3><i class="fas fa-file-alt"></i> Recent Briefs</h3>
+                        <div class="briefs-container" id="recent-briefs">
+                            <div class="briefs-placeholder">
+                                <i class="fas fa-file-alt"></i>
+                                <p>No briefs yet...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Health -->
+                    <div class="card health-card">
+                        <h3><i class="fas fa-heartbeat"></i> Agent Health</h3>
+                        <div class="health-container" id="agent-health">
+                            <div class="health-placeholder">
+                                <i class="fas fa-robot"></i>
+                                <p>Loading agent status...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agents Tab -->
+            <div class="tab-content" id="agents">
+                <div class="tab-header">
+                    <h2><i class="fas fa-robot"></i> Agent Management</h2>
+                    <button class="btn btn-primary" id="refresh-agents">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="agents-grid" id="agents-grid">
+                    <div class="agents-placeholder">
+                        <i class="fas fa-robot"></i>
+                        <p>Loading agents...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Missions Tab -->
+            <div class="tab-content" id="missions">
+                <div class="tab-header">
+                    <h2><i class="fas fa-rocket"></i> Mission Control</h2>
+                    <button class="btn btn-primary" id="create-mission-btn">
+                        <i class="fas fa-plus"></i> New Mission
+                    </button>
+                </div>
+                <div class="missions-container" id="missions-container">
+                    <div class="missions-placeholder">
+                        <i class="fas fa-rocket"></i>
+                        <p>No missions yet. Create your first mission!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Events Tab -->
+            <div class="tab-content" id="events">
+                <div class="tab-header">
+                    <h2><i class="fas fa-stream"></i> Event Explorer</h2>
+                    <div class="filters">
+                        <select id="domain-filter">
+                            <option value="">All Domains</option>
+                            <option value="crypto">Crypto</option>
+                            <option value="ai">AI</option>
+                        </select>
+                        <select id="source-filter">
+                            <option value="">All Sources</option>
+                            <option value="solana">Solana</option>
+                            <option value="github">GitHub</option>
+                            <option value="arxiv">arXiv</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="events-container" id="events-container">
+                    <div class="events-placeholder">
+                        <i class="fas fa-stream"></i>
+                        <p>Loading events...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Briefs Tab -->
+            <div class="tab-content" id="briefs">
+                <div class="tab-header">
+                    <h2><i class="fas fa-file-alt"></i> Intelligence Briefs</h2>
+                    <div class="filters">
+                        <select id="impact-filter">
+                            <option value="">All Impact Levels</option>
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="briefs-container" id="briefs-container">
+                    <div class="briefs-placeholder">
+                        <i class="fas fa-file-alt"></i>
+                        <p>Loading briefs...</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Create Mission Modal -->
+    <div class="modal" id="create-mission-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-rocket"></i> Create New Mission</h3>
+                <button class="modal-close" id="close-mission-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="mission-form">
+                    <div class="form-group">
+                        <label for="mission-prompt">Mission Prompt</label>
+                        <textarea 
+                            id="mission-prompt" 
+                            placeholder="Describe what you want to monitor and analyze..."
+                            rows="4"
+                            required
+                        ></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="token-budget">Token Budget</label>
+                            <input 
+                                type="number" 
+                                id="token-budget" 
+                                value="10000" 
+                                min="100" 
+                                max="1000000"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="max-duration">Max Duration (hours)</label>
+                            <input 
+                                type="number" 
+                                id="max-duration" 
+                                value="24" 
+                                min="1" 
+                                max="168"
+                            >
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="data-sources">Data Sources</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="data-sources" value="solana" checked>
+                                <span class="checkmark"></span>
+                                Solana Blockchain
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="data-sources" value="github" checked>
+                                <span class="checkmark"></span>
+                                GitHub Repositories
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="data-sources" value="arxiv" checked>
+                                <span class="checkmark"></span>
+                                arXiv Papers
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancel-mission">Cancel</button>
+                <button type="submit" class="btn btn-primary" form="mission-form">Create Mission</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Detail Modal -->
+    <div class="modal" id="event-detail-modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3><i class="fas fa-info-circle"></i> Event Details</h3>
+                <button class="modal-close" id="close-event-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="event-detail-content">
+                <!-- Event details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Brief Detail Modal -->
+    <div class="modal" id="brief-detail-modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3><i class="fas fa-file-alt"></i> Brief Details</h3>
+                <button class="modal-close" id="close-brief-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="brief-detail-content">
+                <!-- Brief details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div class="notification-container" id="notification-container">
+        <!-- Notifications will be added here -->
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

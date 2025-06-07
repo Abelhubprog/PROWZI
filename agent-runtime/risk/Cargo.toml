@@ -1,0 +1,96 @@
+[package]
+name = "prowzi-risk"
+version = "0.1.0"
+edition = "2021"
+description = "Advanced risk management system for Prowzi autonomous AI agents"
+authors = ["Prowzi Team"]
+license = "MIT"
+
+[dependencies]
+# Core Solana dependencies
+solana-sdk = "1.18"
+solana-client = "1.18"
+solana-program = "1.18"
+
+# Async runtime and concurrency
+tokio = { version = "1.39", features = ["full", "rt-multi-thread", "macros", "time", "fs", "net", "signal"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# High-performance data structures
+parking_lot = "0.12"
+dashmap = "5.5"
+crossbeam = "0.8"
+lockfree = "0.5"
+
+# Error handling and logging
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Serialization and time
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.8", features = ["v4", "serde"] }
+
+# Mathematics and statistics
+ndarray = "0.15"
+statrs = "0.16"
+rand = "0.8"
+rand_distr = "0.4"
+
+# ML and AI (optional features)
+candle-core = { version = "0.6", optional = true }
+candle-nn = { version = "0.6", optional = true }
+smartcore = { version = "0.3", optional = true }
+
+# Metrics and monitoring
+metrics = "0.23"
+prometheus = "0.13"
+opentelemetry = { version = "0.23", features = ["metrics"] }
+
+# Network and database
+reqwest = { version = "0.12", features = ["json"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
+
+# Configuration
+config = "0.14"
+clap = { version = "4.5", features = ["derive"] }
+
+# Security
+ring = "0.17"
+constant_time_eq = "0.3"
+
+[dev-dependencies]
+tokio-test = "0.4"
+proptest = "1.4"
+test-case = "3.3"
+criterion = { version = "0.5", features = ["html_reports"] }
+wiremock = "0.6"
+
+[features]
+default = ["standard"]
+standard = []
+ml = ["candle-core", "candle-nn", "smartcore"]
+advanced-analytics = ["ml"]
+
+[[bench]]
+name = "risk_calculations"
+harness = false
+
+[[bench]]
+name = "protection_engine"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+opt-level = 3
+lto = true
+codegen-units = 1

@@ -1,0 +1,13 @@
+default:
+  search: perplexity
+  reasoning: gpt-4.1
+  summarise: llama-3-8b
+
+bands:
+  instant:
+    summarise: claude-4-sonnet
+    search: deepseek-r1
+  same-day:
+    summarise: qwen-2.5
+  weekly:
+    summarise: llama-3-8b

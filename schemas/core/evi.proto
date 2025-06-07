@@ -1,0 +1,301 @@
+protobuf
+message EVIEnvelope {
+  string event_id = 1;
+
+  message Scores {
+    float freshness = 1;   // 0.0 to 1.0
+    float novelty = 2;     // 0.0 to 1.0
+    float impact = 3;      // 0.0 to 1.0
+    float confidence = 4;  // 0.0 to 1.0
+    float gap = 5;         // 0.0 to 1.0
+  }
+  Scores scores = 2;
+
+  float total_evi = 3;
+
+  enum Band {
+    BAND_UNSPECIFIED = 0;
+    BAND_INSTANT = 1;
+    BAND_SAME_DAY = 2;
+    BAND_WEEKLY = 3;
+    BAND_ARCHIVE = 4;
+  }
+  Band band = 4;
+
+  map<string, string> explanations = 5;
+}
+Rust Implementation
+agent-runtime/core/src/messages.rs:
+
+rust
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnrichedEvent {
+    pub event_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mission_id: Option<String>,
+    pub timestamp: DateTime<Utc>,
+    pub domain: Domain,
+    pub source: String,
+    pub topic_hints: Vec<String>,
+    pub payload: EventPayload,
+    pub metadata: EventMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Domain {
+    Crypto,
+    Ai,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventPayload {
+    pub raw: serde_json::Value,
+    pub extracted: ExtractedData,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub embeddings: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractedData {
+    pub entities: Vec<Entity>,
+    pub metrics: HashMap<String, f64>,
+    pub sentiment: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Entity {
+    pub entity_type: String,
+    pub id: String,
+    pub attributes: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventMetadata {
+    pub content_hash: String,
+    pub geo_location: Option<GeoLocation>,
+    pub language: String,
+    pub processing_time_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeoLocation {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub country_code: String,
+}
+
+// EVI Scoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EVIEnvelope {
+    pub event_id: String,
+    pub scores: EVIScores,
+    pub total_evi: f32,
+    pub band: Band,
+    pub explanations: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EVIScores {
+    pub freshness: f32,
+    pub novelty: f32,
+    pub impact: f32,
+    pub confidence: f32,
+    pub gap: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Band {
+    Instant,
+    SameDay,
+    Weekly,
+    Archive,
+}
+
+// Task specification for actors
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSpec {
+    pub task_id: String,
+    pub mission_id: String,
+    pub task_type: String,
+    pub priority: u8,
+    pub deadline: Option<DateTime<Utc>>,
+    pub dependencies: Vec<String>,
+    pub payload: serde_json::Value,
+    pub resource_requirements: ResourceRequirements,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceRequirements {
+    pub cpu_ms: u64,
+    pub memory_mb: u64,
+    pub gpu_minutes: Option<u64>,
+    pub tokens: u64,
+    pub bandwidth_mb: u64,
+}
+
+// Mission state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MissionState {
+    pub mission_id: String,
+    pub status: MissionStatus,
+    pub plan: MissionPlan,
+    pub resource_usage: ResourceUsage,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MissionStatus {
+    Planning,
+    Active,
+    Paused,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MissionPlan {
+    pub objectives: Vec<Objective>,
+    pub agents: Vec<AgentSpec>,
+    pub estimated_resources: ResourceRequirements,
+    pub phases: Vec<Phase>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Objective {
+    pub id: String,
+    pub description: String,
+    pub priority: Priority,
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Priority {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+TypeScript Implementation
+platform/shared/types/messages.ts:
+
+typescript
+import { z } from 'zod'
+
+// Domain enum
+export const DomainSchema = z.enum(['crypto', 'ai'])
+export type Domain = z.infer<typeof DomainSchema>
+
+// Entity schema
+export const EntitySchema = z.object({
+  entityType: z.string(),
+  id: z.string(),
+  attributes: z.record(z.string()),
+})
+export type Entity = z.infer<typeof EntitySchema>
+
+// Extracted data
+export const ExtractedDataSchema = z.object({
+  entities: z.array(EntitySchema),
+  metrics: z.record(z.number()),
+  sentiment: z.number().min(-1).max(1).optional(),
+})
+export type ExtractedData = z.infer<typeof ExtractedDataSchema>
+
+// Event payload
+export const EventPayloadSchema = z.object({
+  raw: z.record(z.any()),
+  extracted: ExtractedDataSchema,
+  embeddings: z.array(z.number()).length(768).optional(),
+})
+export type EventPayload = z.infer<typeof EventPayloadSchema>
+
+// Geo location
+export const GeoLocationSchema = z.object({
+  latitude: z.number(),
+  longitude: z.number(),
+  countryCode: z.string(),
+})
+export type GeoLocation = z.infer<typeof GeoLocationSchema>
+
+// Event metadata
+export const EventMetadataSchema = z.object({
+  contentHash: z.string(),
+  geoLocation: GeoLocationSchema.optional(),
+  language: z.string(),
+  processingTimeMs: z.number(),
+})
+export type EventMetadata = z.infer<typeof EventMetadataSchema>
+
+// Enriched event
+export const EnrichedEventSchema = z.object({
+  eventId: z.string().uuid(),
+  missionId: z.string().uuid().optional(),
+  timestamp: z.string().datetime(),
+  domain: DomainSchema,
+  source: z.string(),
+  topicHints: z.array(z.string()),
+  payload: EventPayloadSchema,
+  metadata: EventMetadataSchema,
+})
+export type EnrichedEvent = z.infer<typeof EnrichedEventSchema>
+
+// EVI scores
+export const EVIScoresSchema = z.object({
+  freshness: z.number().min(0).max(1),
+  novelty: z.number().min(0).max(1),
+  impact: z.number().min(0).max(1),
+  confidence: z.number().min(0).max(1),
+  gap: z.number().min(0).max(1),
+})
+export type EVIScores = z.infer<typeof EVIScoresSchema>
+
+// Band enum
+export const BandSchema = z.enum(['instant', 'same_day', 'weekly', 'archive'])
+export type Band = z.infer<typeof BandSchema>
+
+// EVI envelope
+export const EVIEnvelopeSchema = z.object({
+  eventId: z.string().uuid(),
+  scores: EVIScoresSchema,
+  totalEvi: z.number().min(0).max(1),
+  band: BandSchema,
+  explanations: z.record(z.string()),
+})
+export type EVIEnvelope = z.infer<typeof EVIEnvelopeSchema>
+
+// Brief schema
+export const BriefSchema = z.object({
+  briefId: z.string().uuid(),
+  missionId: z.string().uuid().optional(),
+  headline: z.string().max(200),
+  content: z.object({
+    summary: z.string(),
+    evidence: z.array(z.object({
+      source: z.string(),
+      text: z.string(),
+      confidence: z.number(),
+    })),
+    suggestedActions: z.array(z.string()),
+    riskFactors: z.record(z.number()),
+    visualizations: z.array(z.object({
+      type: z.string(),
+      data: z.any(),
+    })).optional(),
+  }),
+  eventIds: z.array(z.string()),
+  impactLevel: z.enum(['critical', 'high', 'medium', 'low']),
+  confidenceScore: z.number().min(0).max(1),
+  createdAt: z.string().datetime(),
+  expiresAt: z.string().datetime().optional(),
+})
+export type Brief = z.infer<typeof BriefSchema>
+

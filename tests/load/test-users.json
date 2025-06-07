@@ -1,0 +1,238 @@
+{
+  "test_users": [
+    {
+      "id": "load_test_user_001",
+      "username": "alex_trader_pro",
+      "email": "alex.trader@prowzi-test.com",
+      "profile": {
+        "experience_level": "expert",
+        "risk_tolerance": "high",
+        "preferred_assets": ["SOL", "BTC", "ETH", "BONK"],
+        "trading_style": "algorithmic",
+        "max_position_size": 50000,
+        "daily_volume_target": 100000
+      },
+      "api_credentials": {
+        "api_key": "pk_test_alex_001_7f8e9d0a1b2c3e4f",
+        "secret_hash": "$2b$12$rQm8K3vN9pL1oE7mS2tY8uX6qW4vB9nH5jA8kD2fG3lP0mR7sT1uV",
+        "rate_limit": 1000,
+        "permissions": ["trade", "read_portfolio", "manage_agents"]
+      },
+      "agent_preferences": {
+        "auto_deploy": true,
+        "risk_parameters": {
+          "max_drawdown": 0.15,
+          "stop_loss": 0.05,
+          "take_profit": 0.12
+        },
+        "notification_settings": {
+          "email": true,
+          "discord": true,
+          "telegram": false,
+          "webhook_url": "https://webhook-test.prowzi.com/alex"
+        }
+      }
+    },
+    {
+      "id": "load_test_user_002",
+      "username": "sarah_defi_master",
+      "email": "sarah.defi@prowzi-test.com",
+      "profile": {
+        "experience_level": "intermediate",
+        "risk_tolerance": "medium",
+        "preferred_assets": ["ETH", "USDC", "MATIC", "AVAX"],
+        "trading_style": "yield_farming",
+        "max_position_size": 25000,
+        "daily_volume_target": 50000
+      },
+      "api_credentials": {
+        "api_key": "pk_test_sarah_002_8g9f0e1b2c3d4f5a",
+        "secret_hash": "$2b$12$sRn9L4wO0qM2pF8nT3uZ9vY7rX5wC0oI6kB9lE3gH4mQ1nS8tU2wX",
+        "rate_limit": 500,
+        "permissions": ["trade", "read_portfolio", "manage_agents", "yield_farm"]
+      },
+      "agent_preferences": {
+        "auto_deploy": true,
+        "risk_parameters": {
+          "max_drawdown": 0.10,
+          "stop_loss": 0.03,
+          "take_profit": 0.08
+        },
+        "notification_settings": {
+          "email": true,
+          "discord": false,
+          "telegram": true,
+          "webhook_url": "https://webhook-test.prowzi.com/sarah"
+        }
+      }
+    },
+    {
+      "id": "load_test_user_003",
+      "username": "mike_hodl_king",
+      "email": "mike.hodl@prowzi-test.com",
+      "profile": {
+        "experience_level": "beginner",
+        "risk_tolerance": "low",
+        "preferred_assets": ["BTC", "ETH", "SOL"],
+        "trading_style": "long_term_hold",
+        "max_position_size": 10000,
+        "daily_volume_target": 5000
+      },
+      "api_credentials": {
+        "api_key": "pk_test_mike_003_9h0g1f2c3d4e5b6a",
+        "secret_hash": "$2b$12$tSo0M5xP1rN3qG9oU4vA0wZ8sY6xD1pJ7lC0mF4hI5nR2oT9uV3yZ",
+        "rate_limit": 100,
+        "permissions": ["read_portfolio", "manage_agents"]
+      },
+      "agent_preferences": {
+        "auto_deploy": false,
+        "risk_parameters": {
+          "max_drawdown": 0.05,
+          "stop_loss": 0.02,
+          "take_profit": 0.05
+        },
+        "notification_settings": {
+          "email": true,
+          "discord": false,
+          "telegram": false,
+          "webhook_url": null
+        }
+      }
+    },
+    {
+      "id": "load_test_user_004",
+      "username": "emma_mev_hunter",
+      "email": "emma.mev@prowzi-test.com",
+      "profile": {
+        "experience_level": "expert",
+        "risk_tolerance": "very_high",
+        "preferred_assets": ["ETH", "WETH", "USDC", "DAI"],
+        "trading_style": "mev_arbitrage",
+        "max_position_size": 100000,
+        "daily_volume_target": 500000
+      },
+      "api_credentials": {
+        "api_key": "pk_test_emma_004_0i1h2g3d4e5f6c7b",
+        "secret_hash": "$2b$12$uTp1N6yQ2sO4rH0pV5wB1xA9tZ7yE2qK8mD1nG5iJ6oS3pU0vW4zA",
+        "rate_limit": 2000,
+        "permissions": ["trade", "read_portfolio", "manage_agents", "mev_search"]
+      },
+      "agent_preferences": {
+        "auto_deploy": true,
+        "risk_parameters": {
+          "max_drawdown": 0.25,
+          "stop_loss": 0.08,
+          "take_profit": 0.20
+        },
+        "notification_settings": {
+          "email": true,
+          "discord": true,
+          "telegram": true,
+          "webhook_url": "https://webhook-test.prowzi.com/emma"
+        }
+      }
+    },
+    {
+      "id": "load_test_user_005",
+      "username": "carlos_nft_trader",
+      "email": "carlos.nft@prowzi-test.com",
+      "profile": {
+        "experience_level": "intermediate",
+        "risk_tolerance": "high",
+        "preferred_assets": ["SOL", "ETH", "MATIC"],
+        "trading_style": "nft_flipping",
+        "max_position_size": 30000,
+        "daily_volume_target": 75000
+      },
+      "api_credentials": {
+        "api_key": "pk_test_carlos_005_1j2i3h4e5f6g7d8c",
+        "secret_hash": "$2b$12$vUq2O7zR3tP5sI1qW6xC2yB0uA8zF3rL9nE2oH6jK7pT4qV1wX5aB",
+        "rate_limit": 750,
+        "permissions": ["trade", "read_portfolio", "manage_agents", "nft_analytics"]
+      },
+      "agent_preferences": {
+        "auto_deploy": true,
+        "risk_parameters": {
+          "max_drawdown": 0.18,
+          "stop_loss": 0.06,
+          "take_profit": 0.15
+        },
+        "notification_settings": {
+          "email": false,
+          "discord": true,
+          "telegram": false,
+          "webhook_url": "https://webhook-test.prowzi.com/carlos"
+        }
+      }
+    }
+  ],
+  "load_test_scenarios": [
+    {
+      "name": "concurrent_users_spike",
+      "description": "Test sudden spike in concurrent users",
+      "target_users": 100,
+      "ramp_up_time": "30s",
+      "test_duration": "5m",
+      "user_distribution": {
+        "expert": 30,
+        "intermediate": 50,
+        "beginner": 20
+      }
+    },
+    {
+      "name": "sustained_load",
+      "description": "Test sustained high load over extended period",
+      "target_users": 50,
+      "ramp_up_time": "2m",
+      "test_duration": "30m",
+      "user_distribution": {
+        "expert": 20,
+        "intermediate": 60,
+        "beginner": 20
+      }
+    },
+    {
+      "name": "stress_test",
+      "description": "Push system beyond normal capacity",
+      "target_users": 500,
+      "ramp_up_time": "5m",
+      "test_duration": "10m",
+      "user_distribution": {
+        "expert": 40,
+        "intermediate": 40,
+        "beginner": 20
+      }
+    }
+  ],
+  "test_configuration": {
+    "base_url": "https://api-test.prowzi.com",
+    "websocket_url": "wss://ws-test.prowzi.com",
+    "auth_endpoint": "/auth/login",
+    "agent_endpoint": "/agents",
+    "portfolio_endpoint": "/portfolio",
+    "trade_endpoint": "/trades",
+    "timeout_ms": 30000,
+    "retry_attempts": 3,
+    "think_time_ms": {
+      "min": 1000,
+      "max": 5000
+    }
+  },
+  "monitoring": {
+    "metrics_to_track": [
+      "response_time_p95",
+      "response_time_p99",
+      "throughput_rps",
+      "error_rate_percent",
+      "concurrent_connections",
+      "memory_usage_mb",
+      "cpu_usage_percent"
+    ],
+    "thresholds": {
+      "response_time_p95_ms": 2000,
+      "response_time_p99_ms": 5000,
+      "error_rate_percent": 1.0,
+      "throughput_rps": 100
+    }
+  }
+}

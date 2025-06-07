@@ -1,0 +1,38 @@
+groups:
+- name: prowzi_critical
+  interval: 30s
+  rules:
+    - alert: HighBriefLatency
+      expr: |
+        histogram_quantile(0.99, 
+          sum(rate(prowzi_brief_generation_seconds_bucket[5m])) by (le, domain)
+        ) > 10
+      for: 5m
+      labels:
+        severity: critical
+        team: platform
+      annotations:
+        summary: "Brief generation P99 latency above 10s"
+        description: "Domain {{ $labels.domain }} has P99 latency of {{ $value }}s"
+
+    - alert: BudgetNearlyExhausted
+      expr: |
+        sum(prowzi_budget_consumed_total) by (mission_id, resource_type) / 
+        sum(prowzi_budget_limit) by (mission_id, resource_type) > 0.9
+      for: 2m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "Mission budget nearly exhausted"
+        description: "Mission {{ $labels.mission_id }} has used 90% of {{ $labels.resource_type }} budget"
+
+    - alert: AgentHeartbeatMissing
+      expr: |
+        increase(prowzi_heartbeat_missed_total[5m]) > 3
+      labels:
+        severity: critical
+        team: sre
+      annotations:
+        summary: "Multiple agents missing heartbeats"
+        description: "{{ $value }} agents have missed heartbeats in the last 5 minutes"

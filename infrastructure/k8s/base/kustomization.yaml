@@ -1,0 +1,171 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base configuration for Prowzi Kubernetes deployments
+metadata:
+  name: prowzi-base
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: prowzi
+  app.kubernetes.io/part-of: prowzi-platform
+
+# Common annotations
+commonAnnotations:
+  app.kubernetes.io/version: "1.0.0"
+  app.kubernetes.io/managed-by: kustomize
+
+# Namespace for all resources
+namespace: prowzi
+
+# Resources included in this kustomization
+resources:
+  # Core infrastructure
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  
+  # Service accounts and RBAC
+  - service-account.yaml
+  - rbac.yaml
+  
+  # Network policies
+  - network-policies.yaml
+  
+  # Pod disruption budgets
+  - pod-disruption-budgets.yaml
+  
+  # Horizontal pod autoscalers
+  - hpa.yaml
+  
+  # Services
+  - services.yaml
+  
+  # Deployments
+  - ../deployments/gateway.yaml
+  - ../deployments/orchestrator.yaml
+  - ../deployments/evaluator.yaml
+  - ../deployments/curator.yaml
+  - ../deployments/guardian.yaml
+  - ../deployments/notifier.yaml
+  - ../deployments/analytics.yaml
+  - ../deployments/auth.yaml
+  
+  # CronJobs
+  - ../cronjobs/backup.yaml
+  - ../cronjobs/cleanup.yaml
+  - ../cronjobs/health-check.yaml
+
+# Images with common configurations
+images:
+  - name: prowzi/gateway
+    newTag: latest
+  - name: prowzi/orchestrator
+    newTag: latest
+  - name: prowzi/evaluator
+    newTag: latest
+  - name: prowzi/curator
+    newTag: latest
+  - name: prowzi/guardian
+    newTag: latest
+  - name: prowzi/notifier
+    newTag: latest
+  - name: prowzi/analytics
+    newTag: latest
+  - name: prowzi/auth
+    newTag: latest
+
+# ConfigMap generator for common configuration
+configMapGenerator:
+  - name: prowzi-config
+    literals:
+      - LOG_LEVEL=info
+      - METRICS_ENABLED=true
+      - TRACING_ENABLED=true
+      - HEALTH_CHECK_INTERVAL=30s
+      - MAX_CONNECTIONS=1000
+    envs:
+      - common.env
+
+# Secret generator for common secrets
+secretGenerator:
+  - name: prowzi-secrets
+    type: Opaque
+    envs:
+      - secrets.env
+
+# Patches to apply to resources
+patches:
+  # Add resource limits to all containers
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources/limits
+        value:
+          memory: "2Gi"
+          cpu: "1000m"
+      - op: add
+        path: /spec/template/spec/containers/0/resources/requests
+        value:
+          memory: "512Mi"
+          cpu: "200m"
+
+  # Add security context to all pods
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext
+        value:
+          runAsNonRoot: true
+          runAsUser: 65534
+          fsGroup: 65534
+          seccompProfile:
+            type: RuntimeDefault
+
+  # Add liveness and readiness probes
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/livenessProbe
+        value:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      - op: add
+        path: /spec/template/spec/containers/0/readinessProbe
+        value:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+# Replacements for common patterns
+replacements:
+  - source:
+      kind: ConfigMap
+      name: prowzi-config
+      fieldPath: data.LOG_LEVEL
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.spec.containers.[name=*].env.[name=LOG_LEVEL].value
+
+# Generators for OpenAPI schemas and CRDs
+generators:
+  - generator.yaml
+
+# Validators
+validators:
+  - kubeval
+  - kubeconform

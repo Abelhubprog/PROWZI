@@ -1,0 +1,103 @@
+{{- if .Values.monitoring.prometheusRules.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "prowzi.fullname" . }}-cost-alerts
+  labels:
+    {{- include "prowzi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    prometheus: {{ .Values.monitoring.prometheusRules.prometheusInstance | default "kube-prometheus" }}
+    role: alert-rules
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+spec:
+  groups:
+  - name: prowzi.cost.alerts
+    rules:
+    - alert: ProwziCostHigh
+      expr: cost_per_brief > {{ .Values.monitoring.costAlerts.costPerBriefThreshold | default 0.07 }}
+      for: 5m
+      labels:
+        severity: warning
+        category: cost
+        team: finops
+      annotations:
+        summary: "Cost per brief exceeds threshold"
+        description: "The average cost per intelligence brief has exceeded {{ .Values.monitoring.costAlerts.costPerBriefThreshold | default 0.07 }} USD for 5 minutes."
+        runbook_url: "{{ .Values.monitoring.runbookBaseUrl | default "https://docs.prowzi.com/runbooks" }}/cost-per-brief-high"
+        value: "{{ $value | printf \"%.3f\" }} USD"
+        action: "Check which models are being used most frequently and consider adjusting band thresholds or enabling more Llama fallbacks."
+
+    - alert: ProwziGPUCostHigh
+      expr: gpu_dollars_per_hour > {{ .Values.monitoring.costAlerts.gpuDollarsPerHourThreshold | default 5 }}
+      for: 10m
+      labels:
+        severity: warning
+        category: cost
+        team: finops
+      annotations:
+        summary: "GPU cost per hour exceeds threshold"
+        description: "The GPU cost per hour has exceeded {{ .Values.monitoring.costAlerts.gpuDollarsPerHourThreshold | default 5 }} USD for 10 minutes."
+        runbook_url: "{{ .Values.monitoring.runbookBaseUrl | default "https://docs.prowzi.com/runbooks" }}/gpu-cost-high"
+        value: "{{ $value | printf \"%.2f\" }} USD/hour"
+        action: "Check for unnecessary GPU usage, consider scaling down GPU nodes or moving workloads to CPU nodes."
+
+    - alert: ProwziCostCritical
+      expr: cost_per_brief > {{ .Values.monitoring.costAlerts.costPerBriefCriticalThreshold | default 0.15 }}
+      for: 5m
+      labels:
+        severity: critical
+        category: cost
+        team: finops
+      annotations:
+        summary: "Cost per brief critically high"
+        description: "The average cost per intelligence brief has exceeded {{ .Values.monitoring.costAlerts.costPerBriefCriticalThreshold | default 0.15 }} USD for 5 minutes."
+        runbook_url: "{{ .Values.monitoring.runbookBaseUrl | default "https://docs.prowzi.com/runbooks" }}/cost-per-brief-critical"
+        value: "{{ $value | printf \"%.3f\" }} USD"
+        action: "Immediately check for API key misuse, enable strict rate limiting, and force Llama fallback for all non-instant briefs."
+
+    - alert: ProwziGPUCostCritical
+      expr: gpu_dollars_per_hour > {{ .Values.monitoring.costAlerts.gpuDollarsPerHourCriticalThreshold | default 10 }}
+      for: 5m
+      labels:
+        severity: critical
+        category: cost
+        team: finops
+      annotations:
+        summary: "GPU cost per hour critically high"
+        description: "The GPU cost per hour has exceeded {{ .Values.monitoring.costAlerts.gpuDollarsPerHourCriticalThreshold | default 10 }} USD for 5 minutes."
+        runbook_url: "{{ .Values.monitoring.runbookBaseUrl | default "https://docs.prowzi.com/runbooks" }}/gpu-cost-critical"
+        value: "{{ $value | printf \"%.2f\" }} USD/hour"
+        action: "Immediately scale down GPU workloads, check for runaway processes, and consider enabling emergency cost circuit breaker."
+
+  - name: prowzi.performance.alerts
+    rules:
+    - alert: ProwziHighLatency
+      expr: prowzi_end_to_end_latency_p95 > {{ .Values.monitoring.performanceAlerts.latencyThresholdSeconds | default 1 }}
+      for: 5m
+      labels:
+        severity: warning
+        category: performance
+        team: sre
+      annotations:
+        summary: "High end-to-end latency"
+        description: "The P95 end-to-end latency has exceeded {{ .Values.monitoring.performanceAlerts.latencyThresholdSeconds | default 1 }} seconds for 5 minutes."
+        runbook_url: "{{ .Values.monitoring.runbookBaseUrl | default "https://docs.prowzi.com/runbooks" }}/high-latency"
+        value: "{{ $value | printf \"%.2f\" }} seconds"
+        action: "Check for bottlenecks in the processing pipeline, ensure sufficient resources for all components."
+
+    - alert: ProwziHighEventLoss
+      expr: prowzi_event_loss_percentage > {{ .Values.monitoring.performanceAlerts.eventLossThresholdPercent | default 0.5 }}
+      for: 5m
+      labels:
+        severity: warning
+        category: performance
+        team: sre
+      annotations:
+        summary: "High event loss rate"
+        description: "The event loss percentage has exceeded {{ .Values.monitoring.performanceAlerts.eventLossThresholdPercent | default 0.5 }}% for 5 minutes."
+        runbook_url: "{{ .Values.monitoring.runbookBaseUrl | default "https://docs.prowzi.com/runbooks" }}/high-event-loss"
+        value: "{{ $value | printf \"%.2f\" }}%"
+        action: "Check NATS JetStream capacity, ensure consumers are processing messages fast enough, and verify no network issues."
+{{- end }}

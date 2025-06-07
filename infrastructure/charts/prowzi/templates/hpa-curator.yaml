@@ -1,0 +1,42 @@
+{{- if .Values.curator.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "prowzi.fullname" . }}-curator
+  labels:
+    {{- include "prowzi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: curator
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+    {{- with .Values.curator.hpa.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "prowzi.fullname" . }}-curator
+  minReplicas: {{ .Values.curator.hpa.minReplicas | default 1 }}
+  maxReplicas: {{ .Values.curator.hpa.maxReplicas | default 5 }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.curator.hpa.target | default 70 }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 120
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 60
+{{- end }}

@@ -1,0 +1,45 @@
+[package]
+name = "prowzi-crypto-signer"
+version = "0.1.0"
+edition = "2021"
+description = "Cryptographic transaction signing for Prowzi trading agents"
+authors = ["Prowzi Team"]
+license = "MIT"
+
+[dependencies]
+# AWS SDK for KMS integration
+aws-config = { version = "0.55", optional = true }
+aws-sdk-kms = { version = "0.28", optional = true }
+aws-smithy-runtime = { version = "0.55", optional = true }
+
+# Crypto libraries
+ed25519-dalek = { version = "2.0", features = ["rand_core"] }
+base58 = "0.2"
+bs58 = "0.5"  # Alternative base58 implementation used by Solana
+sha2 = "0.10"
+
+# Async runtime
+tokio = { version = "1.28", features = ["full"] }
+
+# Error handling and utilities
+anyhow = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Core Prowzi dependencies
+prowzi-core = { path = "../core" }
+
+[features]
+default = ["kms", "local-key"]
+kms = ["aws-config", "aws-sdk-kms", "aws-smithy-runtime"]
+local-key = []
+
+[dev-dependencies]
+mockall = "0.11"
+tokio-test = "0.4"
+tempfile = "3.5"
+rand = "0.8"

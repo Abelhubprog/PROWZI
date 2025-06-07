@@ -1,0 +1,60 @@
+name: Generate SBOM
+
+on:
+  push:
+    tags:
+      - 'v*'
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly
+
+jobs:
+  generate-sbom:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Syft
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+    - name: Generate SBOM for containers
+      run: |
+        for image in $(find . -name Dockerfile -exec dirname {} \; | sort -u); do
+          SERVICE=$(basename $image)
+          syft ghcr.io/${{ github.repository }}/${SERVICE}:latest \
+            -o spdx-json > sbom-${SERVICE}.spdx.json
+        done
+
+    - name: Generate SBOM for source
+      run: |
+        syft dir:. -o spdx-json > sbom-source.spdx.json
+
+    - name: Merge SBOMs
+      run: |
+        npm install -g @cyclonedx/cli
+        cyclonedx merge \
+          --input-files sbom-*.spdx.json \
+          --output-file prowzi-sbom.json
+
+    - name: Sign SBOM
+      uses: sigstore/cosign-installer@v3
+      run: |
+        cosign sign-blob \
+          --key env://COSIGN_PRIVATE_KEY \
+          --output-signature prowzi-sbom.json.sig \
+          prowzi-sbom.json
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v3
+      with:
+        name: sbom
+        path: |
+          prowzi-sbom.json
+          prowzi-sbom.json.sig
+
+    - name: Publish to S3
+      run: |
+        aws s3 cp prowzi-sbom.json \
+          s3://prowzi-compliance/sbom/prowzi-sbom-${{ github.ref_name }}.json
+        aws s3 cp prowzi-sbom.json.sig \
+          s3://prowzi-compliance/sbom/prowzi-sbom-${{ github.ref_name }}.json.sig

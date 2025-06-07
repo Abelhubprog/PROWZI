@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package prowzi.events;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/prowzi/prowzi/pkg/protos/events";
+
+// Core event that flows through the system
+message Event {
+  string id = 1;
+  string mission_id = 2;
+  string source = 3;
+  EventType type = 4;
+  string domain = 5;
+  google.protobuf.Timestamp timestamp = 6;
+  google.protobuf.Any payload = 7;
+  map<string, string> metadata = 8;
+  EviScores evi_scores = 9;
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_TOKEN_LAUNCH = 1;
+  EVENT_TYPE_REPO_UPDATE = 2;
+  EVENT_TYPE_PAPER_PUBLISHED = 3;
+  EVENT_TYPE_EXPLOIT_DETECTED = 4;
+  EVENT_TYPE_FUNDING_ROUND = 5;
+  EVENT_TYPE_PROTOCOL_UPDATE = 6;
+  EVENT_TYPE_AI_MODEL_RELEASE = 7;
+  EVENT_TYPE_GOVERNANCE_PROPOSAL = 8;
+}
+
+// Event Value of Information scores
+message EviScores {
+  float total = 1;
+  float freshness = 2;
+  float impact = 3;
+  float confidence = 4;
+  float novelty = 5;
+}
+
+// Token launch event payload
+message TokenLaunchPayload {
+  string token_address = 1;
+  string token_name = 2;
+  string token_symbol = 3;
+  string deployer_address = 4;
+  uint64 initial_supply = 5;
+  string blockchain = 6;
+  google.protobuf.Timestamp launch_time = 7;
+  string dex_listing = 8;
+  float initial_price_usd = 9;
+}
+
+// Repository update payload
+message RepoUpdatePayload {
+  string repo_url = 1;
+  string commit_hash = 2;
+  string author = 3;
+  string message = 4;
+  repeated string files_changed = 5;
+  int32 additions = 6;
+  int32 deletions = 7;
+  repeated string tags = 8;
+}
+
+// Research paper payload
+message PaperPayload {
+  string arxiv_id = 1;
+  string title = 2;
+  repeated string authors = 3;
+  string abstract = 4;
+  string pdf_url = 5;
+  repeated string categories = 6;
+  google.protobuf.Timestamp published_date = 7;
+}
+
+// AI model release payload
+message ModelReleasePayload {
+  string model_name = 1;
+  string organization = 2;
+  string model_type = 3;
+  int64 parameter_count = 4;
+  string license = 5;
+  string huggingface_url = 6;
+  repeated string capabilities = 7;
+  BenchmarkScores benchmark_scores = 8;
+}
+
+message BenchmarkScores {
+  map<string, float> scores = 1;
+}
+
+// Exploit detection payload
+message ExploitPayload {
+  string protocol_name = 1;
+  string exploit_type = 2;
+  float amount_lost_usd = 3;
+  string transaction_hash = 4;
+  string attacker_address = 5;
+  string description = 6;
+  string severity = 7;
+}

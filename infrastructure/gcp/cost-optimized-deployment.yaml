@@ -1,0 +1,329 @@
+# Google Cloud Cost-Optimized Infrastructure for Prowzi
+# Zero-budget deployment using cheapest possible services
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gcp-cost-optimization
+  namespace: prowzi
+data:
+  # Use Spot/Preemptible instances for 70-90% cost savings
+  # Use single region (us-central1) for lowest costs
+  # Use Cloud Run for auto-scaling to zero
+  
+  gcp-region: "us-central1"
+  gcp-zone: "us-central1-a"
+  cost-tier: "minimal"
+
+---
+# Cloud Run services for pay-per-request pricing
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: prowzi-gateway
+  namespace: prowzi
+  annotations:
+    run.googleapis.com/cpu-throttling: "true"
+    run.googleapis.com/execution-environment: gen2
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Cost optimization: minimum instances
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        # Use lowest cost CPU allocation
+        run.googleapis.com/cpu: "0.5"
+        run.googleapis.com/memory: "512Mi"
+        # Use spot instances when available
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 100
+      containers:
+      - image: gcr.io/PROJECT_ID/prowzi-gateway:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: prowzi-secrets
+              key: database-url
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+
+---
+# GKE Autopilot cluster for minimal management overhead
+apiVersion: container.cnrm.cloud.google.com/v1beta1
+kind: ContainerCluster
+metadata:
+  name: prowzi-cluster
+  namespace: prowzi
+spec:
+  location: us-central1
+  
+  # Autopilot mode for cost optimization
+  enableAutopilot: true
+  
+  # Cost optimizations
+  ipAllocationPolicy:
+    useIpAliases: true
+  
+  # Security hardening
+  masterAuth:
+    clientCertificateConfig:
+      issueClientCertificate: false
+  
+  networkPolicy:
+    enabled: true
+  
+  # Workload Identity for secure pod authentication
+  workloadIdentityConfig:
+    workloadPool: PROJECT_ID.svc.id.goog
+
+---
+# Cloud SQL for PostgreSQL - smallest instance
+apiVersion: sql.cnrm.cloud.google.com/v1beta1
+kind: SQLInstance
+metadata:
+  name: prowzi-db
+  namespace: prowzi
+spec:
+  databaseVersion: POSTGRES_15
+  region: us-central1
+  
+  settings:
+    # Smallest tier for cost optimization
+    tier: db-f1-micro
+    # Enable automatic backups but keep minimal retention
+    backupConfiguration:
+      enabled: true
+      retainedBackups: 7
+      transactionLogRetentionDays: 7
+    
+    # IP configuration for security
+    ipConfiguration:
+      requireSsl: true
+      authorizedNetworks: []
+      privateNetwork: projects/PROJECT_ID/global/networks/default
+    
+    # Maintenance window during low-usage hours
+    maintenanceWindow:
+      hour: 3
+      day: 7
+      updateTrack: stable
+
+---
+# Cloud Memorystore Redis - smallest instance
+apiVersion: redis.cnrm.cloud.google.com/v1beta1
+kind: RedisInstance
+metadata:
+  name: prowzi-redis
+  namespace: prowzi
+spec:
+  region: us-central1
+  # Smallest tier
+  memorySizeGb: 1
+  tier: BASIC
+  
+  # Security settings
+  authEnabled: true
+  transitEncryptionMode: SERVER_AUTH
+  
+  # Network configuration
+  authorizedNetwork: projects/PROJECT_ID/global/networks/default
+  connectMode: PRIVATE_SERVICE_ACCESS
+
+---
+# Secret Manager for secure credential storage
+apiVersion: secretmanager.cnrm.cloud.google.com/v1beta1
+kind: SecretManagerSecret
+metadata:
+  name: prowzi-jwt-keys
+  namespace: prowzi
+spec:
+  secretId: prowzi-jwt-keys
+  replication:
+    automatic: true
+
+---
+# IAM Service Account with minimal permissions
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMServiceAccount
+metadata:
+  name: prowzi-workload-identity
+  namespace: prowzi
+spec:
+  accountId: prowzi-workload-sa
+  displayName: "Prowzi Workload Identity Service Account"
+
+---
+# Cloud Storage bucket for data backup (standard storage)
+apiVersion: storage.cnrm.cloud.google.com/v1beta1
+kind: StorageBucket
+metadata:
+  name: prowzi-backups
+  namespace: prowzi
+spec:
+  location: us-central1
+  storageClass: STANDARD
+  
+  # Lifecycle management for cost control
+  lifecycle:
+    rule:
+    - action:
+        type: SetStorageClass
+        storageClass: NEARLINE
+      condition:
+        age: 30
+    - action:
+        type: SetStorageClass
+        storageClass: COLDLINE
+      condition:
+        age: 90
+    - action:
+        type: Delete
+      condition:
+        age: 365
+  
+  # Uniform bucket-level access for security
+  uniformBucketLevelAccess: true
+
+---
+# Cloud Functions for lightweight processing
+apiVersion: cloudfunctions.cnrm.cloud.google.com/v1beta1
+kind: CloudFunctionsFunction
+metadata:
+  name: prowzi-evaluator
+  namespace: prowzi
+spec:
+  name: prowzi-evaluator
+  location: us-central1
+  
+  # Smallest configuration
+  availableMemoryMb: 128
+  timeout: 60s
+  maxInstances: 10
+  
+  # Event trigger for cost efficiency
+  eventTrigger:
+    eventType: google.pubsub.topic.publish
+    resource: projects/PROJECT_ID/topics/prowzi-events
+  
+  # Source code from Cloud Source Repository (free)
+  sourceRepository:
+    url: https://source.developers.google.com/projects/PROJECT_ID/repos/prowzi/moveable-aliases/main/paths/platform/evaluator
+  
+  # Environment variables
+  environmentVariables:
+    RUST_LOG: info
+    DATABASE_URL: postgresql://prowzi:password@10.0.0.1/prowzi
+
+---
+# Pub/Sub topics for async messaging (pay per use)
+apiVersion: pubsub.cnrm.cloud.google.com/v1beta1
+kind: PubSubTopic
+metadata:
+  name: prowzi-events
+  namespace: prowzi
+spec:
+  name: prowzi-events
+  
+  # Message retention for cost control
+  messageRetentionDuration: 604800s # 7 days
+
+---
+# Cloud Monitoring dashboard (free tier)
+apiVersion: monitoring.cnrm.cloud.google.com/v1beta1
+kind: MonitoringDashboard
+metadata:
+  name: prowzi-dashboard
+  namespace: prowzi
+spec:
+  displayName: "Prowzi Cost-Optimized Monitoring"
+  
+  # Basic widgets for essential monitoring
+  dashboardJson: |
+    {
+      "widgets": [
+        {
+          "title": "Cloud Run Request Count",
+          "xyChart": {
+            "dataSets": [{
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"cloud_run_revision\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_RATE",
+                    "crossSeriesReducer": "REDUCE_SUM"
+                  }
+                }
+              }
+            }]
+          }
+        },
+        {
+          "title": "Database Connections",
+          "xyChart": {
+            "dataSets": [{
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "resource.type=\"cloudsql_database\"",
+                  "aggregation": {
+                    "alignmentPeriod": "60s",
+                    "perSeriesAligner": "ALIGN_MEAN"
+                  }
+                }
+              }
+            }]
+          }
+        }
+      ]
+    }
+
+---
+# Network Security Policy
+apiVersion: networking.gke.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prowzi-network-policy
+  namespace: prowzi
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # Restrict ingress to necessary services only
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: prowzi
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # Allow egress to database and external APIs only
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
+    - protocol: TCP
+      port: 443   # HTTPS
+    - protocol: TCP
+      port: 53    # DNS
+    - protocol: UDP
+      port: 53    # DNS

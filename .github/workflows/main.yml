@@ -1,0 +1,425 @@
+name: Prowzi CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'agent-runtime/**'
+      - 'platform/**'
+      - 'infrastructure/**'
+      - 'docker/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'agent-runtime/**'
+      - 'platform/**'
+      - 'infrastructure/**'
+      - 'docker/**'
+      - '.github/workflows/**'
+
+env:
+  RUST_VERSION: 1.75.0
+  GO_VERSION: 1.21
+  NODE_VERSION: 20
+  DOCKER_REGISTRY: ghcr.io
+
+jobs:
+  # Rust jobs
+  rust-check:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('agent-runtime/**') != '' }}
+    strategy:
+      matrix:
+        package:
+          - agent-runtime/analyzers
+          - agent-runtime/core
+          - agent-runtime/crypto_signer
+          - agent-runtime/evaluator
+          - agent-runtime/guardian
+          - agent-runtime/mcp
+          - agent-runtime/orchestrator
+          - agent-runtime/risk
+          - agent-runtime/sensors/solana_mempool
+          - agent-runtime/weight-updater
+          - agent-runtime/analyzers/trading_agent
+          - platform/auth
+          - platform/gateway
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if package exists
+        id: check-package
+        run: |
+          if [ -f "${{ matrix.package }}/Cargo.toml" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Rust
+        if: steps.check-package.outputs.exists == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        if: steps.check-package.outputs.exists == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.package }}
+
+      - name: Check formatting
+        if: steps.check-package.outputs.exists == 'true'
+        run: cargo fmt --check
+        working-directory: ${{ matrix.package }}
+
+      - name: Clippy
+        if: steps.check-package.outputs.exists == 'true'
+        run: cargo clippy -- -D warnings
+        working-directory: ${{ matrix.package }}
+
+      - name: Test
+        if: steps.check-package.outputs.exists == 'true'
+        run: cargo test
+        working-directory: ${{ matrix.package }}
+
+  # CUDA build
+  cuda-build:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('platform/ml-models/**') != '' }}
+    strategy:
+      matrix:
+        cuda: [11.8, 12.0]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if CUDA files exist
+        id: check-cuda
+        run: |
+          if [ -f "platform/ml-models/gpu_similarity.cu" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup CUDA
+        if: steps.check-cuda.outputs.exists == 'true'
+        uses: Jimver/cuda-toolkit@v0.2.11
+        with:
+          cuda: ${{ matrix.cuda }}
+
+      - name: Build GPU components
+        if: steps.check-cuda.outputs.exists == 'true'
+        run: |
+          cd platform/ml-models
+          nvcc -O3 gpu_similarity.cu -o gpu_similarity
+
+      - name: Upload artifact
+        if: steps.check-cuda.outputs.exists == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: gpu-binary-cuda${{ matrix.cuda }}
+          path: platform/ml-models/gpu_similarity
+
+  # TypeScript/Node jobs
+  node-check:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('platform/**/*.json') != '' || hashFiles('sdk/**/*.json') != '' }}
+    strategy:
+      matrix:
+        package:
+          - platform/analytics
+          - platform/api
+          - platform/curator
+          - platform/mission-control
+          - platform/security
+          - platform/shared
+          - platform/web
+          - sdk/auth
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if package exists
+        id: check-package
+        run: |
+          if [ -f "${{ matrix.package }}/package.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node
+        if: steps.check-package.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      - name: Install dependencies
+        if: steps.check-package.outputs.exists == 'true'
+        run: npm ci
+        working-directory: ${{ matrix.package }}
+
+      - name: Lint
+        if: steps.check-package.outputs.exists == 'true' && hashFiles(format('{0}/package.json', matrix.package)) != '' && contains(fromJson(steps.check-scripts.outputs.scripts || '{}'), 'lint')
+        id: check-scripts
+        run: |
+          scripts=$(cat package.json | jq '.scripts // {}')
+          echo "scripts=$scripts" >> $GITHUB_OUTPUT
+          if echo "$scripts" | jq -e '.lint' > /dev/null; then
+            npm run lint
+          fi
+        working-directory: ${{ matrix.package }}
+
+      - name: Type check
+        if: steps.check-package.outputs.exists == 'true' && contains(fromJson(steps.check-scripts.outputs.scripts || '{}'), 'type-check')
+        run: npm run type-check
+        working-directory: ${{ matrix.package }}
+
+      - name: Test
+        if: steps.check-package.outputs.exists == 'true' && contains(fromJson(steps.check-scripts.outputs.scripts || '{}'), 'test')
+        run: npm test
+        working-directory: ${{ matrix.package }}
+
+  # Go build for notifier
+  go-check:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('platform/notifier/**/*.go') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check if Go module exists
+        id: check-go
+        run: |
+          if [ -f "platform/notifier/go.mod" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download dependencies
+        if: steps.check-go.outputs.exists == 'true'
+        run: go mod download
+        working-directory: platform/notifier
+
+      - name: Build
+        if: steps.check-go.outputs.exists == 'true'
+        run: go build -v ./...
+        working-directory: platform/notifier
+
+      - name: Test
+        if: steps.check-go.outputs.exists == 'true'
+        run: go test -v ./...
+        working-directory: platform/notifier
+
+  # Docker builds
+  docker-build:
+    needs: [rust-check, node-check, go-check]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (success() || failure()) && !cancelled()
+    strategy:
+      matrix:
+        service:
+          - gateway
+          - orchestrator
+          - evaluator
+          - guardian
+          - curator
+          - notifier
+          - sensor-solana
+          - sensor-github
+          - sensor-arxiv
+          - weight-updater
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if Dockerfile exists
+        id: check-dockerfile
+        run: |
+          if [ -f "docker/${{ matrix.service }}/Dockerfile" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check-dockerfile.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: steps.check-dockerfile.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: steps.check-dockerfile.outputs.exists == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Helm chart validation
+  helm-check:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('infrastructure/charts/**') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if charts exist
+        id: check-charts
+        run: |
+          if [ -f "infrastructure/charts/prowzi/Chart.yaml" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Helm
+        if: steps.check-charts.outputs.exists == 'true'
+        uses: azure/setup-helm@v3
+
+      - name: Lint charts
+        if: steps.check-charts.outputs.exists == 'true'
+        run: |
+          helm lint infrastructure/charts/prowzi
+
+      - name: Template validation
+        if: steps.check-charts.outputs.exists == 'true'
+        run: |
+          helm template prowzi infrastructure/charts/prowzi --values infrastructure/charts/prowzi/values.yaml
+
+      - name: Test install
+        if: steps.check-charts.outputs.exists == 'true'
+        run: |
+          kind create cluster
+          helm install --dry-run --debug prowzi infrastructure/charts/prowzi
+
+  # Security scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+
+      - name: SAST with Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+
+  # Dependency checks
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Rust dependencies
+        if: ${{ hashFiles('**/Cargo.toml') != '' }}
+        run: |
+          if command -v cargo-audit &> /dev/null; then
+            cargo install cargo-audit
+          fi
+          find . -name "Cargo.toml" -execdir cargo audit \;
+
+      - name: Check Node dependencies
+        if: ${{ hashFiles('**/package.json') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run npm audit
+        if: ${{ hashFiles('**/package.json') != '' }}
+        run: |
+          find . -name "package.json" -not -path "*/node_modules/*" | while read package; do
+            dir=$(dirname "$package")
+            if [ -f "$dir/package-lock.json" ]; then
+              echo "Auditing $dir"
+              cd "$dir" && npm audit --audit-level=moderate || true
+              cd - > /dev/null
+            fi
+          done
+
+  # CodeQL Analysis
+  codeql-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript, go]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+  # Deploy to staging
+  deploy-staging:
+    needs: [docker-build, helm-check]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && (success() || failure()) && !cancelled()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if staging config exists
+        id: check-staging
+        run: |
+          if [ -f "infrastructure/k8s/staging/kustomization.yaml" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Flux manifests
+        if: steps.check-staging.outputs.exists == 'true'
+        run: |
+          sed -i "s/tag: .*/tag: ${{ github.sha }}/" infrastructure/k8s/staging/kustomization.yaml
+
+      - name: Commit and push
+        if: steps.check-staging.outputs.exists == 'true'
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add infrastructure/k8s/staging/kustomization.yaml
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update staging to ${{ github.sha }}"
+            git push
+          fi

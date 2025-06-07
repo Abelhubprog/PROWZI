@@ -1,0 +1,84 @@
+modules = ["python-3.11", "postgresql-16"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["libxcrypt", "nats-server", "postgresql"]
+
+[workflows]
+runButton = "Prowzi Platform Complete"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Prowzi Server"
+
+[[workflows.workflow]]
+name = "Prowzi Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m pip install --upgrade pip && pip install asyncpg nats-py redis aiohttp fastapi uvicorn pydantic openai numpy && python main.py"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Prowzi Platform"
+author = 36294645
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m pip install --upgrade pip"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install asyncpg nats-py redis aiohttp fastapi uvicorn pydantic openai numpy"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd prowzi/platform/gateway && python main.py"
+
+[[workflows.workflow]]
+name = "Prowzi Platform Complete"
+author = 36294645
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m pip install --upgrade pip"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install asyncpg nats-py redis aiohttp fastapi uvicorn pydantic openai numpy websockets"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd prowzi/platform/gateway && python main.py"
+
+[[workflows.workflow]]
+name = "Prowzi Platform Complete"
+author = 36294645
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m pip install --upgrade pip"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install asyncpg nats-py redis aiohttp fastapi uvicorn pydantic openai numpy websockets"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd prowzi/platform/gateway && python main.py"
+
+[deployment]
+run = ["sh", "-c", "python -m pip install --upgrade pip && pip install asyncpg nats-py redis aiohttp fastapi uvicorn pydantic openai numpy && python main.py"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80

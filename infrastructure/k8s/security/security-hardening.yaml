@@ -1,0 +1,628 @@
+# Production Security Hardening for Kubernetes
+# Implements defense-in-depth with zero-trust architecture
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prowzi-secure
+  labels:
+    security.hardened: "true"
+    cost.optimized: "true"
+  annotations:
+    scheduler.alpha.kubernetes.io/node-selector: "security=hardened"
+
+---
+# Pod Security Standards - Restricted
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prowzi-secure
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+# Network Policy - Deny All by Default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: prowzi-secure
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Network Policy - Allow Internal Communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internal
+  namespace: prowzi-secure
+spec:
+  podSelector:
+    matchLabels:
+      app: prowzi
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: prowzi-secure
+    - podSelector:
+        matchLabels:
+          app: prowzi
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 3000
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: prowzi-secure
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
+  - to: []  # Allow DNS
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - to: []  # Allow HTTPS for external APIs
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# Network Policy - Database Access Only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-access-only
+  namespace: prowzi-secure
+spec:
+  podSelector:
+    matchLabels:
+      component: database
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prowzi
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Security Context for Gateway
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prowzi-gateway-secure
+  namespace: prowzi-secure
+  labels:
+    app: prowzi
+    component: gateway
+    security.hardened: "true"
+spec:
+  replicas: 2  # Minimum for availability
+  selector:
+    matchLabels:
+      app: prowzi
+      component: gateway
+  template:
+    metadata:
+      labels:
+        app: prowzi
+        component: gateway
+      annotations:
+        # Security scanning
+        container.apparmor.security.beta.kubernetes.io/gateway: runtime/default
+    spec:
+      # Security contexts
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534  # nobody user
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+        supplementalGroups: []
+      
+      # Service account
+      serviceAccountName: prowzi-gateway-sa
+      automountServiceAccountToken: false
+      
+      # Node selection for security
+      nodeSelector:
+        security: hardened
+        cost-optimized: "true"
+      
+      # Anti-affinity for availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - gateway
+              topologyKey: kubernetes.io/hostname
+      
+      containers:
+      - name: gateway
+        image: gcr.io/PROJECT_ID/prowzi-gateway:latest
+        imagePullPolicy: Always
+        
+        # Security context for container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        
+        # Resource limits (cost-optimized)
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+            ephemeral-storage: 1Gi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+            ephemeral-storage: 512Mi
+        
+        # Environment variables from secrets
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: prowzi-db-secret
+              key: connection-string
+        - name: JWT_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: prowzi-jwt-secret
+              key: private-key
+        - name: RUST_LOG
+          value: "info"
+        
+        # Ports
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # Volume mounts for writable directories
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /app/cache
+      
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 100Mi
+      - name: cache
+        emptyDir:
+          sizeLimit: 100Mi
+
+---
+# Service Account with Minimal Permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prowzi-gateway-sa
+  namespace: prowzi-secure
+  labels:
+    app: prowzi
+    component: gateway
+automountServiceAccountToken: false
+
+---
+# RBAC - Minimal Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prowzi-gateway-role
+  namespace: prowzi-secure
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["prowzi-db-secret", "prowzi-jwt-secret"]
+  verbs: ["get"]
+
+---
+# RBAC - Role Binding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prowzi-gateway-binding
+  namespace: prowzi-secure
+subjects:
+- kind: ServiceAccount
+  name: prowzi-gateway-sa
+  namespace: prowzi-secure
+roleRef:
+  kind: Role
+  name: prowzi-gateway-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Horizontal Pod Autoscaler (Cost-Optimized)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: prowzi-gateway-hpa
+  namespace: prowzi-secure
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: prowzi-gateway-secure
+  minReplicas: 1  # Cost optimization
+  maxReplicas: 5  # Limit for cost control
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: prowzi-gateway-pdb
+  namespace: prowzi-secure
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: prowzi
+      component: gateway
+
+---
+# Secret for Database Connection
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prowzi-db-secret
+  namespace: prowzi-secure
+  labels:
+    app: prowzi
+type: Opaque
+data:
+  # Base64 encoded connection string
+  connection-string: cG9zdGdyZXNxbDovL3Byb3d6aV91c2VyOnNlY3VyZV9wYXNzd29yZEAxMC4wLjAuMTo1NDMyL3Byb3d6aQ==
+
+---
+# Secret for JWT Keys
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prowzi-jwt-secret
+  namespace: prowzi-secure
+  labels:
+    app: prowzi
+type: Opaque
+data:
+  # Base64 encoded JWT private key (replace with actual key)
+  private-key: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpGQUtFX0tFWV9GT1JfREVNT19PTIZNWQ==
+
+---
+# Security Policy - OPA Gatekeeper
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: requiresecuritycontext
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequireSecurityContext
+      validation:
+        openAPIV3Schema:
+          type: object
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requiresecuritycontext
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.runAsNonRoot
+          msg := "Containers must run as non-root"
+        }
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.readOnlyRootFilesystem
+          msg := "Containers must have read-only root filesystem"
+        }
+
+---
+# Apply Security Policy
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequireSecurityContext
+metadata:
+  name: must-have-security-context
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaces: ["prowzi-secure"]
+
+---
+# Resource Quota for Cost Control
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: prowzi-resource-quota
+  namespace: prowzi-secure
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    limits.cpu: "4"
+    limits.memory: 8Gi
+    persistentvolumeclaims: "5"
+    pods: "20"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+
+---
+# Limit Range for Default Constraints
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: prowzi-limit-range
+  namespace: prowzi-secure
+spec:
+  limits:
+  - default:
+      cpu: 500m
+      memory: 512Mi
+      ephemeral-storage: 1Gi
+    defaultRequest:
+      cpu: 100m
+      memory: 256Mi
+      ephemeral-storage: 512Mi
+    type: Container
+  - max:
+      cpu: "2"
+      memory: 4Gi
+    min:
+      cpu: 50m
+      memory: 128Mi
+    type: Container
+
+---
+# Security Monitoring via Falco
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-config
+  namespace: prowzi-secure
+data:
+  falco.yaml: |
+    rules_file:
+      - /etc/falco/falco_rules.yaml
+      - /etc/falco/prowzi_rules.yaml
+    
+    json_output: true
+    json_include_output_property: true
+    
+    log_stderr: true
+    log_syslog: false
+    
+    priority: debug
+    
+    outputs:
+      rate: 1
+      max_burst: 1000
+    
+    syscall_event_drops:
+      actions:
+        - log
+        - alert
+      rate: 0.03333
+      max_burst: 10
+    
+    outputs_queue:
+      capacity: 0
+  
+  prowzi_rules.yaml: |
+    - rule: Prowzi Suspicious File Access
+      desc: Detect access to sensitive files in Prowzi namespace
+      condition: >
+        open_read and
+        k8s_ns=prowzi-secure and
+        (fd.name startswith /etc/passwd or
+         fd.name startswith /etc/shadow or
+         fd.name startswith /root/.ssh)
+      output: >
+        Suspicious file access in Prowzi namespace 
+        (user=%user.name command=%proc.cmdline file=%fd.name)
+      priority: WARNING
+    
+    - rule: Prowzi Network Connection to Unexpected Port
+      desc: Detect network connections to unexpected ports
+      condition: >
+        inbound_outbound and
+        k8s_ns=prowzi-secure and
+        not fd.port in (8080, 5432, 6379, 443, 53)
+      output: >
+        Unexpected network connection 
+        (user=%user.name command=%proc.cmdline port=%fd.port)
+      priority: WARNING
+
+---
+# DaemonSet for Falco Security Monitoring
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: prowzi-secure
+  labels:
+    app: falco
+spec:
+  selector:
+    matchLabels:
+      app: falco
+  template:
+    metadata:
+      labels:
+        app: falco
+    spec:
+      serviceAccountName: falco
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: falco
+        image: falcosecurity/falco:latest
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            memory: 200Mi
+            cpu: 200m
+          requests:
+            memory: 100Mi
+            cpu: 100m
+        volumeMounts:
+        - name: config
+          mountPath: /etc/falco
+        - name: dev
+          mountPath: /host/dev
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: boot
+          mountPath: /host/boot
+          readOnly: true
+        - name: modules
+          mountPath: /host/lib/modules
+          readOnly: true
+        - name: usr
+          mountPath: /host/usr
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: falco-config
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: boot
+        hostPath:
+          path: /boot
+      - name: modules
+        hostPath:
+          path: /lib/modules
+      - name: usr
+        hostPath:
+          path: /usr
+
+---
+# Service Account for Falco
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: falco
+  namespace: prowzi-secure
+
+---
+# ClusterRole for Falco
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: falco
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for Falco
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: falco
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: falco
+subjects:
+- kind: ServiceAccount
+  name: falco
+  namespace: prowzi-secure

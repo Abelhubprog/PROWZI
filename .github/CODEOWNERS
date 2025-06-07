@@ -1,0 +1,42 @@
+# Global code owners
+* @prowzi/engineering-team
+
+# Security critical paths
+/.github/ @prowzi/security-team @prowzi/engineering-leads
+/infrastructure/ @prowzi/devops-team @prowzi/engineering-leads
+/platform/security/ @prowzi/security-team
+/platform/auth/ @prowzi/security-team
+/migrations/ @prowzi/data-team @prowzi/engineering-leads
+
+# Agent runtime (Rust)
+/agent-runtime/ @prowzi/rust-team @prowzi/engineering-leads
+/agent-runtime/core/ @prowzi/architecture-team
+/agent-runtime/orchestrator/ @prowzi/architecture-team
+/agent-runtime/guardian/ @prowzi/reliability-team
+
+# Platform services
+/platform/gateway/ @prowzi/backend-team
+/platform/web/ @prowzi/frontend-team
+/platform/ml-models/ @prowzi/ml-team
+/platform/curator/ @prowzi/ai-team
+/platform/mission-control/ @prowzi/product-team
+
+# Data and schemas
+/database/ @prowzi/data-team
+/schemas/ @prowzi/data-team
+/protos/ @prowzi/api-team
+
+# DevOps and infrastructure
+/docker/ @prowzi/devops-team
+/infrastructure/k8s/ @prowzi/devops-team
+/infrastructure/terraform/ @prowzi/devops-team
+/infrastructure/charts/ @prowzi/devops-team
+
+# Documentation and governance
+/README.md @prowzi/documentation-team
+/governance/ @prowzi/legal-team @prowzi/engineering-leads
+
+# CI/CD and testing
+/.github/workflows/ @prowzi/devops-team @prowzi/engineering-leads
+/tests/ @prowzi/qa-team
+/scripts/ @prowzi/devops-team

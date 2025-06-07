@@ -1,0 +1,129 @@
+groups:
+  - name: prowzi_finops
+    interval: 1m
+    rules:
+      # Cost per brief alert
+      - alert: HighCostPerBrief
+        expr: |
+          (
+            sum(rate(prowzi_infrastructure_cost_dollars[5m])) / 
+            sum(rate(prowzi_briefs_generated_total[5m]))
+          ) > 0.05
+        for: 15m
+        labels:
+          severity: critical
+          team: finops
+        annotations:
+          summary: "Cost per brief exceeds $0.05"
+          description: "Current cost per brief: ${{ $value | humanize }}"
+          runbook_url: "https://wiki.prowzi.io/runbooks/high-cost-per-brief"
+
+      # GPU cost spike
+      - alert: GPUCostSpike
+        expr: |
+          sum(rate(prowzi_gpu_seconds_total[5m])) * 0.0001 > 
+          sum(avg_over_time(prowzi_gpu_seconds_total[1h])) * 0.0001 * 1.5
+        for: 10m
+        labels:
+          severity: warning
+          team: finops
+        annotations:
+          summary: "GPU costs 50% above baseline"
+          description: "GPU $/hr: {{ $value | humanize }}, baseline: {{ $labels.baseline }}"
+
+      # Token cost anomaly
+      - alert: TokenCostAnomaly
+        expr: |
+          (
+            sum(rate(prowzi_tokens_used_total{model="gpt-4"}[5m])) * 0.00002
+          ) > 100
+        for: 5m
+        labels:
+          severity: critical
+          team: finops
+          page: true
+        annotations:
+          summary: "GPT-4 token cost exceeds $100/hr"
+          description: "Immediate action required - token burn rate: ${{ $value }}/hr"
+
+      # User cost threshold
+      - alert: UserCostExceeded
+        expr: |
+          sum by (user_id, tenant_id) (
+            prowzi_user_cost_dollars
+          ) > 2.0
+        for: 1h
+        labels:
+          severity: warning
+          team: billing
+        annotations:
+          summary: "User {{ $labels.user_id }} exceeds $2/month"
+          description: "Tenant {{ $labels.tenant_id }} user cost: ${{ $value }}"
+
+      # Budget utilization
+      - alert: BudgetNearExhaustion
+        expr: |
+          (
+            sum(prowzi_budget_consumed_total) by (mission_id, resource_type) /
+            sum(prowzi_budget_limit_total) by (mission_id, resource_type)
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Mission budget > 90% utilized"
+          description: "Mission {{ $labels.mission_id }} {{ $labels.resource_type }} at {{ $value | humanizePercentage }}"
+
+      # Recording rules for cost efficiency
+      - record: prowzi:cost_per_brief
+        expr: |
+          sum(rate(prowzi_infrastructure_cost_dollars[5m])) / 
+          sum(rate(prowzi_briefs_generated_total[5m]))
+
+      - record: prowzi:gpu_dollars_per_hour
+        expr: |
+          sum(rate(prowzi_gpu_seconds_total[5m])) * 0.0001 * 3600
+
+      - record: prowzi:token_dollars_per_hour
+        expr: |
+          sum(rate(prowzi_tokens_used_total[5m])) by (model) * 
+          on(model) group_left() prowzi_token_price_dollars
+Alertmanager Configuration:
+
+yaml
+route:
+  group_by: ['alertname', 'team']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+  routes:
+    - match:
+        team: finops
+        severity: critical
+      receiver: finops-critical
+
+    - match:
+        page: true
+      receiver: pagerduty
+
+receivers:
+  - name: default
+    slack_configs:
+      - api_url: '$SLACK_WEBHOOK_URL'
+        channel: '#alerts'
+
+  - name: finops-critical
+    slack_configs:
+      - api_url: '$SLACK_WEBHOOK_URL'
+        channel: '#finops-alerts'
+        title: '💸 FinOps Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+    pagerduty_configs:
+      - service_key: '$PAGERDUTY_FINOPS_KEY'
+
+  - name: pagerduty
+    pagerduty_configs:
+      - service_key: '$PAGERDUTY_KEY'
+        description: '{{ .GroupLabels
