@@ -1,0 +1,258 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'agent-runtime/**'
+      - 'packages/**'
+      - 'platform/**'
+      - 'sdk/**'
+      - 'docker/**'
+      - 'infrastructure/**'
+      - 'charts/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'agent-runtime/**'
+      - 'packages/**'
+      - 'platform/**'
+      - 'sdk/**'
+      - 'docker/**'
+      - 'infrastructure/**'
+      - 'charts/**'
+  schedule:
+    # Run security scans daily at 3 AM UTC
+    - cron: '0 3 * * *'
+
+env:
+  NODE_PACKAGES: ${{ join(fromJSON('["packages","platform","sdk"]'), ' ') }}
+  DOCKER_DIRS: ${{ join(fromJSON('["docker/gateway","docker/orchestrator","docker/evaluator","docker/guardian","docker/notifier","docker/curator"]'), ' ') }}
+
+jobs:
+  # Static security analysis for dependencies
+  dependency-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        scan-type: [rust, node, python]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set Node packages for scanning
+      id: set-node-packages
+      run: |
+        packages=""
+        for dir in ${{ env.NODE_PACKAGES }}; do
+          if [ -d "$dir" ]; then
+            found=$(find "$dir" -name "package.json" -type f | head -1)
+            if [ -n "$found" ]; then
+              packages="$packages $dir"
+            fi
+          fi
+        done
+        packages=$(echo $packages | xargs)
+        echo "matrix=$packages" >> $GITHUB_OUTPUT
+        echo "Found Node.js packages in: $packages"
+    
+    - name: Setup Rust (for Rust dependencies)
+      if: matrix.scan-type == 'rust'
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        
+    - name: Setup Node.js (for Node dependencies) 
+      if: matrix.scan-type == 'node' && steps.set-node-packages.outputs.matrix != ''
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Setup Python (for Python dependencies)
+      if: matrix.scan-type == 'python'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Rust Security Audit
+      if: matrix.scan-type == 'rust'
+      run: |
+        cargo install cargo-audit
+        find . -name "Cargo.toml" -not -path "./target/*" | while read cargo_file; do
+          echo "Auditing: $cargo_file"
+          cargo audit --file "$cargo_file" || true
+        done
+    
+    - name: Node.js Security Audit
+      if: matrix.scan-type == 'node' && steps.set-node-packages.outputs.matrix != ''
+      run: |
+        for dir in ${{ steps.set-node-packages.outputs.matrix }}; do
+          find "$dir" -name "package.json" -type f | while read package; do
+            pkg_dir=$(dirname "$package")
+            if [ -f "$pkg_dir/package-lock.json" ]; then
+              echo "Auditing: $pkg_dir"
+              cd "$pkg_dir" && npm audit --audit-level=moderate --json > audit-results.json || true
+              cd "$GITHUB_WORKSPACE"
+            fi
+          done
+        done
+    
+    - name: Python Security Scan with Safety
+      if: matrix.scan-type == 'python'
+      run: |
+        pip install safety
+        if [ -f "requirements.txt" ]; then
+          safety check -r requirements.txt --json > safety-results.json || true
+        fi
+        find . -name "requirements.txt" -not -path "./venv/*" -not -path "./.venv/*" | while read req; do
+          echo "Scanning: $req"
+          safety check -r "$req" || true
+        done
+
+  # SAST with CodeQL
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      
+    strategy:
+      matrix:
+        language: ['javascript', 'python', 'rust']
+        
+    env:
+      CODEQL_ENABLE_EXPERIMENTAL_FEATURES: "true"
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+        
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+      
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+
+  # Container image security scanning
+  container-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    if: github.event_name == 'push'
+    
+    strategy:
+      matrix:
+        dir: ['gateway', 'orchestrator', 'evaluator', 'guardian', 'notifier', 'curator']
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build Docker image for ${{ matrix.dir }}
+      run: |
+        if [ -f "docker/${{ matrix.dir }}/Dockerfile" ]; then
+          docker build -f docker/${{ matrix.dir }}/Dockerfile -t prowzi-${{ matrix.dir }}:test .
+        else
+          echo "Dockerfile not found for ${{ matrix.dir }}, skipping"
+          exit 0
+        fi
+    
+    - name: Scan ${{ matrix.dir }} image with Trivy
+      if: always()
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'prowzi-${{ matrix.dir }}:test'
+        format: 'sarif'
+        output: 'trivy-${{ matrix.dir }}.sarif'
+    
+    - name: Upload Trivy scan results for ${{ matrix.dir }}
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-${{ matrix.dir }}.sarif'
+        category: 'container-${{ matrix.dir }}'
+
+  # Secrets scanning
+  secrets-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Install TruffleHog
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+    
+    - name: Scan for secrets
+      run: |
+        trufflehog git file://. --since-commit HEAD~1 --only-verified --fail
+
+  # Infrastructure security scanning
+  iac-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Checkov on infrastructure
+      uses: bridgecrewio/checkov-action@master
+      with:
+        directory: infrastructure
+        framework: dockerfile,kubernetes,terraform
+        output_format: sarif
+        output_file_path: checkov-infrastructure.sarif
+        soft_fail: true
+    
+    - name: Run Checkov on charts
+      if: always()
+      uses: bridgecrewio/checkov-action@master
+      with:
+        directory: charts
+        framework: kubernetes,helm
+        output_format: sarif
+        output_file_path: checkov-charts.sarif
+        soft_fail: true
+    
+    - name: Create combined SARIF file
+      if: always()
+      run: |
+        echo '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}' > checkov-results.sarif
+        
+        if [ -f "checkov-infrastructure.sarif" ] && [ -s "checkov-infrastructure.sarif" ]; then
+          cp checkov-infrastructure.sarif checkov-results.sarif
+        fi
+        
+        if [ -f "checkov-charts.sarif" ] && [ -s "checkov-charts.sarif" ]; then
+          if [ -s "checkov-results.sarif" ] && [ "$(cat checkov-results.sarif)" != '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}' ]; then
+            # Merge SARIF files if both exist
+            jq -s '{"$schema": .[0]."$schema", "version": .[0].version, "runs": [.[0].runs[], .[1].runs[]]}' checkov-results.sarif checkov-charts.sarif > merged-checkov.sarif
+            mv merged-checkov.sarif checkov-results.sarif
+          else
+            cp checkov-charts.sarif checkov-results.sarif
+          fi
+        fi
+        
+        echo "Final SARIF file size: $(wc -c < checkov-results.sarif) bytes"
+    
+    - name: Upload Checkov results
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: checkov-results.sarif
+        category: 'iac-security'
