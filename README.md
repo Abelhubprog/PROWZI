@@ -538,7 +538,4 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 *Last updated: December 2024 • Version 1.0.0*
 
-</div>#   P r o w z i  
- #   P r o w z i  
- #   P R O W Z I  
- 
+</div>#
