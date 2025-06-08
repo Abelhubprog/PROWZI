@@ -1,3 +1,4 @@
+# filepath: c:\Prowzi\.github\workflows\security.yml
 name: Security Scan
 
 on:
@@ -6,8 +7,7 @@ on:
     paths:
       - 'agent-runtime/**'
       - 'packages/**'
-      - 'platform/**'
-      - 'sdk/**'
+      - 'web/**'
       - 'docker/**'
       - 'infrastructure/**'
       - 'charts/**'
@@ -16,8 +16,7 @@ on:
     paths:
       - 'agent-runtime/**'
       - 'packages/**'
-      - 'platform/**'
-      - 'sdk/**'
+      - 'web/**'
       - 'docker/**'
       - 'infrastructure/**'
       - 'charts/**'
@@ -26,8 +25,8 @@ on:
     - cron: '0 3 * * *'
 
 env:
-  NODE_PACKAGES: ${{ join(fromJSON('["packages","platform","sdk"]'), ' ') }}
-  DOCKER_DIRS: ${{ join(fromJSON('["docker/gateway","docker/orchestrator","docker/evaluator","docker/guardian","docker/notifier","docker/curator"]'), ' ') }}
+  NODE_PACKAGES: ${{ join(fromJSON('["packages","web"]'), ' ') }}
+  DOCKER_DIRS: ${{ join(fromJSON('["docker/gateway","docker/mission-control"]'), ' ') }}
 
 jobs:
   # Static security analysis for dependencies
@@ -39,25 +38,36 @@ jobs:
     strategy:
       matrix:
         scan-type: [rust, node, python]
+      fail-fast: false
     
     steps:
     - uses: actions/checkout@v4
     
     - name: Set Node packages for scanning
       id: set-node-packages
+      if: matrix.scan-type == 'node'
       run: |
         packages=""
         for dir in ${{ env.NODE_PACKAGES }}; do
           if [ -d "$dir" ]; then
-            found=$(find "$dir" -name "package.json" -type f | head -1)
-            if [ -n "$found" ]; then
-              packages="$packages $dir"
+            found_packages=""
+            # Look for directories with package.json AND a lockfile
+            while IFS= read -r pkg; do
+              pkg_dir=$(dirname "$pkg")
+              if [[ -f "$pkg_dir/package-lock.json" || -f "$pkg_dir/pnpm-lock.yaml" || -f "$pkg_dir/yarn.lock" ]]; then
+                found_packages="$found_packages $pkg_dir"
+              fi
+            done < <(find "$dir" -name "package.json" -type f)
+            
+            if [ -n "$found_packages" ]; then
+              packages="$packages$found_packages"
             fi
           fi
         done
+        
         packages=$(echo $packages | xargs)
         echo "matrix=$packages" >> $GITHUB_OUTPUT
-        echo "Found Node.js packages in: $packages"
+        echo "Found Node.js packages with lockfiles in: $packages"
     
     - name: Setup Rust (for Rust dependencies)
       if: matrix.scan-type == 'rust'
@@ -89,24 +99,21 @@ jobs:
     - name: Node.js Security Audit
       if: matrix.scan-type == 'node' && steps.set-node-packages.outputs.matrix != ''
       run: |
-        for dir in ${{ steps.set-node-packages.outputs.matrix }}; do
-          find "$dir" -name "package.json" -type f | while read package; do
-            pkg_dir=$(dirname "$package")
-            if [ -f "$pkg_dir/package-lock.json" ]; then
-              echo "Auditing: $pkg_dir"
-              cd "$pkg_dir" && npm audit --audit-level=moderate --json > audit-results.json || true
-              cd "$GITHUB_WORKSPACE"
-            fi
-          done
+        for pkg_dir in ${{ steps.set-node-packages.outputs.matrix }}; do
+          echo "Auditing: $pkg_dir"
+          if [ -f "$pkg_dir/package-lock.json" ]; then
+            (cd "$pkg_dir" && npm audit --audit-level=moderate) || true
+          elif [ -f "$pkg_dir/pnpm-lock.yaml" ]; then
+            (cd "$pkg_dir" && pnpm audit) || true
+          elif [ -f "$pkg_dir/yarn.lock" ]; then
+            (cd "$pkg_dir" && yarn audit) || true
+          fi
         done
     
     - name: Python Security Scan with Safety
       if: matrix.scan-type == 'python'
       run: |
         pip install safety
-        if [ -f "requirements.txt" ]; then
-          safety check -r requirements.txt --json > safety-results.json || true
-        fi
         find . -name "requirements.txt" -not -path "./venv/*" -not -path "./.venv/*" | while read req; do
           echo "Scanning: $req"
           safety check -r "$req" || true
@@ -123,6 +130,7 @@ jobs:
     strategy:
       matrix:
         language: ['javascript', 'python', 'rust']
+      fail-fast: false
         
     env:
       CODEQL_ENABLE_EXPERIMENTAL_FEATURES: "true"
@@ -147,34 +155,50 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'schedule'
     
     strategy:
       matrix:
-        dir: ['gateway', 'orchestrator', 'evaluator', 'guardian', 'notifier', 'curator']
+        dir: ['gateway', 'mission-control']
+      fail-fast: false
     
     steps:
     - uses: actions/checkout@v4
     
     - name: Build Docker image for ${{ matrix.dir }}
+      id: build-image
       run: |
         if [ -f "docker/${{ matrix.dir }}/Dockerfile" ]; then
-          docker build -f docker/${{ matrix.dir }}/Dockerfile -t prowzi-${{ matrix.dir }}:test .
+          echo "Building docker/${{ matrix.dir }}/Dockerfile"
+          docker build --build-arg REQ_PATH=requirements.txt -f docker/${{ matrix.dir }}/Dockerfile \
+            -t prowzi-${{ matrix.dir }}:test .
+          echo "image_built=true" >> $GITHUB_OUTPUT
         else
           echo "Dockerfile not found for ${{ matrix.dir }}, skipping"
-          exit 0
+          echo "image_built=false" >> $GITHUB_OUTPUT
         fi
     
     - name: Scan ${{ matrix.dir }} image with Trivy
-      if: always()
+      if: steps.build-image.outputs.image_built == 'true'
       uses: aquasecurity/trivy-action@master
       with:
         image-ref: 'prowzi-${{ matrix.dir }}:test'
         format: 'sarif'
         output: 'trivy-${{ matrix.dir }}.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+    
+    - name: Create empty SARIF file if build failed
+      if: steps.build-image.outputs.image_built != 'true'
+      run: |
+        cat > trivy-${{ matrix.dir }}.sarif << 'EOL'
+        {
+          "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+          "version": "2.1.0",
+          "runs": []
+        }
+        EOL
     
     - name: Upload Trivy scan results for ${{ matrix.dir }}
-      if: always()
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: 'trivy-${{ matrix.dir }}.sarif'
@@ -210,7 +234,23 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Check infrastructure directory exists
+      id: check-dirs
+      run: |
+        if [ -d "infrastructure" ]; then
+          echo "infra_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "infra_exists=false" >> $GITHUB_OUTPUT
+        fi
+        
+        if [ -d "charts" ]; then
+          echo "charts_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "charts_exists=false" >> $GITHUB_OUTPUT
+        fi
+    
     - name: Run Checkov on infrastructure
+      if: steps.check-dirs.outputs.infra_exists == 'true'
       uses: bridgecrewio/checkov-action@master
       with:
         directory: infrastructure
@@ -220,7 +260,7 @@ jobs:
         soft_fail: true
     
     - name: Run Checkov on charts
-      if: always()
+      if: steps.check-dirs.outputs.charts_exists == 'true'
       uses: bridgecrewio/checkov-action@master
       with:
         directory: charts
@@ -230,29 +270,27 @@ jobs:
         soft_fail: true
     
     - name: Create combined SARIF file
-      if: always()
       run: |
-        echo '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}' > checkov-results.sarif
+        echo '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}' > checkov.sarif
         
         if [ -f "checkov-infrastructure.sarif" ] && [ -s "checkov-infrastructure.sarif" ]; then
-          cp checkov-infrastructure.sarif checkov-results.sarif
+          cp checkov-infrastructure.sarif checkov.sarif
         fi
         
         if [ -f "checkov-charts.sarif" ] && [ -s "checkov-charts.sarif" ]; then
-          if [ -s "checkov-results.sarif" ] && [ "$(cat checkov-results.sarif)" != '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}' ]; then
+          if [ -s "checkov.sarif" ] && [ "$(cat checkov.sarif)" != '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}' ]; then
             # Merge SARIF files if both exist
-            jq -s '{"$schema": .[0]."$schema", "version": .[0].version, "runs": [.[0].runs[], .[1].runs[]]}' checkov-results.sarif checkov-charts.sarif > merged-checkov.sarif
-            mv merged-checkov.sarif checkov-results.sarif
+            jq -s '{"$schema": .[0]."$schema", "version": .[0].version, "runs": [.[0].runs[], .[1].runs[]]}' checkov.sarif checkov-charts.sarif > merged-checkov.sarif
+            mv merged-checkov.sarif checkov.sarif
           else
-            cp checkov-charts.sarif checkov-results.sarif
+            cp checkov-charts.sarif checkov.sarif
           fi
         fi
         
-        echo "Final SARIF file size: $(wc -c < checkov-results.sarif) bytes"
+        echo "Final SARIF file size: $(wc -c < checkov.sarif) bytes"
     
     - name: Upload Checkov results
-      if: always()
       uses: github/codeql-action/upload-sarif@v3
       with:
-        sarif_file: checkov-results.sarif
+        sarif_file: checkov.sarif
         category: 'iac-security'
